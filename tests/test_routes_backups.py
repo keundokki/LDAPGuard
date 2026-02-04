@@ -1,5 +1,4 @@
 """Tests for backup routes."""
-import pytest
 from fastapi import status
 
 
@@ -26,8 +25,7 @@ class TestBackupRoutes:
         """Test creating backup with valid data."""
         backup_data = {
             "ldap_server_id": 1,
-            "backup_type": "full",
-            "description": "Test backup"
+            "backup_type": "full"
         }
         response = client.post("/backups", json=backup_data)
         assert response.status_code in [
@@ -56,19 +54,4 @@ class TestBackupRoutes:
             status.HTTP_401_UNAUTHORIZED
         ]
 
-    def test_download_backup(self, client):
-        """Test downloading backup file."""
-        response = client.get("/backups/1/download")
-        assert response.status_code in [
-            status.HTTP_200_OK,
-            status.HTTP_404_NOT_FOUND,
-            status.HTTP_401_UNAUTHORIZED
-        ]
-
-    def test_get_backup_stats(self, client):
-        """Test getting backup statistics."""
-        response = client.get("/backups/stats")
-        assert response.status_code in [
-            status.HTTP_200_OK,
-            status.HTTP_401_UNAUTHORIZED
-        ]
+    

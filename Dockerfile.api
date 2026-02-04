@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ ./api/
 COPY config/ ./config/
 COPY migrations/ ./migrations/
+COPY alembic.ini .
 
 # Create necessary directories
 RUN mkdir -p /app/backups /app/logs
@@ -26,4 +27,4 @@ RUN mkdir -p /app/backups /app/logs
 EXPOSE 8000
 
 # Run database migrations and start API
-CMD ["sh", "-c", "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "cd /app && alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"]

@@ -1,5 +1,4 @@
 """Tests for authentication routes."""
-import pytest
 from fastapi import status
 
 
@@ -20,14 +19,12 @@ class TestAuthRoutes:
         assert "version" in data
         assert "status" in data
 
-    @pytest.mark.asyncio
     def test_login_missing_credentials(self, client):
         """Test login without credentials."""
         response = client.post("/auth/login", json={})
         # Should return 422 for missing required fields
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    @pytest.mark.asyncio
     def test_login_with_invalid_credentials(self, client):
         """Test login with invalid credentials."""
         response = client.post("/auth/login", json={
@@ -37,8 +34,7 @@ class TestAuthRoutes:
         # Should return 401 Unauthorized
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    @pytest.mark.asyncio
-    def test_login_successful(self, client, test_user_data, db):
+    def test_login_successful(self, client, test_user_data):
         """Test successful login."""
         # First, create a user (if endpoint exists)
         # Then test login

@@ -1,5 +1,9 @@
 # LDAPGuard
 
+[![CI/CD Pipeline](https://github.com/keundokki/LDAPGuard/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/keundokki/LDAPGuard/actions/workflows/ci-cd.yml)
+[![Security Checks](https://github.com/keundokki/LDAPGuard/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/keundokki/LDAPGuard/actions/workflows/security.yml)
+[![Code Quality](https://github.com/keundokki/LDAPGuard/actions/workflows/linting.yml/badge.svg?branch=main)](https://github.com/keundokki/LDAPGuard/actions/workflows/linting.yml)
+
 **Multi-container Podman application for centralized LDAP backup/restore on Linux NAS**
 
 ## 🚀 Features

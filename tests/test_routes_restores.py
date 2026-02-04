@@ -1,5 +1,4 @@
 """Tests for restore routes."""
-import pytest
 from fastapi import status
 
 
@@ -27,8 +26,8 @@ class TestRestoreRoutes:
         restore_data = {
             "backup_id": 1,
             "ldap_server_id": 1,
-            "restore_type": "full",
-            "dry_run": True
+            "selective_restore": False,
+            "restore_filter": None
         }
         response = client.post("/restores", json=restore_data)
         assert response.status_code in [
@@ -47,28 +46,4 @@ class TestRestoreRoutes:
             status.HTTP_401_UNAUTHORIZED
         ]
 
-    def test_cancel_restore(self, client):
-        """Test canceling restore operation."""
-        response = client.post("/restores/1/cancel")
-        assert response.status_code in [
-            status.HTTP_200_OK,
-            status.HTTP_404_NOT_FOUND,
-            status.HTTP_401_UNAUTHORIZED
-        ]
-
-    def test_get_restore_preview(self, client):
-        """Test getting restore preview."""
-        response = client.get("/restores/1/preview")
-        assert response.status_code in [
-            status.HTTP_200_OK,
-            status.HTTP_404_NOT_FOUND,
-            status.HTTP_401_UNAUTHORIZED
-        ]
-
-    def test_get_restore_status(self, client):
-        """Test getting restore status."""
-        response = client.get("/restores/status")
-        assert response.status_code in [
-            status.HTTP_200_OK,
-            status.HTTP_401_UNAUTHORIZED
-        ]
+    

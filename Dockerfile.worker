@@ -16,8 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY workers/ ./workers/
 COPY config/ ./config/
-COPY api/models/ ./api/models/
-COPY api/core/ ./api/core/
+COPY api/ ./api/
 
 # Create necessary directories
 RUN mkdir -p /app/backups /app/logs

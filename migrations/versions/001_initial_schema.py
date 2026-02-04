@@ -135,7 +135,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_audit_logs_id'), table_name='audit_logs')
+    op.create_index(op.f('ix_audit_logs_id'), 'audit_logs', ['id'])
 
 
 def downgrade() -> None:

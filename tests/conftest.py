@@ -1,56 +1,52 @@
 """Pytest configuration and fixtures."""
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from api.main import app
 from api.core.database import Base, get_db
-import os
-from unittest.mock import Mock, patch
+from api.models import models  # noqa: F401
+from unittest.mock import patch
 
-# Use in-memory SQLite database for tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+# Use SQLite database for async tests
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 
-engine = create_engine(
+engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+sync_engine = create_engine(
+    "sqlite:///./test.db", connect_args={"check_same_thread": False}
+)
+TestingSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
 
-def override_get_db():
+async def override_get_db():
     """Override database dependency for testing."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
+    async with TestingSessionLocal() as session:
+        yield session
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
     """Create test database tables."""
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=sync_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=sync_engine)
 
 
 @pytest.fixture
-def db():
-    """Get test database session."""
-    # Create tables
-    Base.metadata.create_all(bind=engine)
-    yield TestingSessionLocal()
-    # Clean up
-    Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture
-def client(db):
+def client():
     """Create test client."""
+    Base.metadata.create_all(bind=sync_engine)
     app.dependency_overrides[get_db] = override_get_db
-    client = TestClient(app)
-    yield client
+    with TestClient(app) as client:
+        yield client
     app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=sync_engine)
 
 
 @pytest.fixture

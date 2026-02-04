@@ -1,6 +1,5 @@
 """Tests for LDAP service."""
-import pytest
-from unittest.mock import Mock, patch
+from api.services.ldap_service import LDAPService
 
 
 class TestLDAPService:
@@ -8,53 +7,37 @@ class TestLDAPService:
 
     def test_connect_to_ldap_server(self, mock_ldap):
         """Test connecting to LDAP server."""
-        from api.services.ldap_service import LDAPService
-        
-        service = LDAPService()
-        with patch('ldap.initialize', return_value=mock_ldap):
-            # Connection setup test
-            assert service is not None
+        service = LDAPService(
+            host="ldap.example.com",
+            port=389,
+            use_ssl=False,
+            base_dn="dc=example,dc=com"
+        )
+        service.connect()
+        connection = mock_ldap.return_value
+        connection.set_option.assert_called_once()
+        connection.simple_bind_s.assert_called()
 
-    def test_validate_ldap_credentials(self, mock_ldap):
-        """Test validating LDAP credentials."""
-        from api.services.ldap_service import LDAPService
-        
-        service = LDAPService()
-        with patch.object(service, 'bind', return_value=True):
-            result = service.validate_credentials(
-                host="ldap.example.com",
-                bind_dn="cn=admin,dc=example,dc=com",
-                password="password"
-            )
-            # Should validate without error
-
-    def test_search_ldap_directory(self, mock_ldap):
+    def test_search_all_entries(self, mock_ldap):
         """Test searching LDAP directory."""
-        from api.services.ldap_service import LDAPService
-        
-        service = LDAPService()
-        with patch.object(service, 'search_s', return_value=[]):
-            result = service.search("(objectClass=*)")
-            assert isinstance(result, list)
+        mock_ldap.return_value.search_s.return_value = [("cn=admin,dc=example,dc=com", {"cn": [b"admin"]})]
+        service = LDAPService(
+            host="ldap.example.com",
+            port=389,
+            use_ssl=False,
+            base_dn="dc=example,dc=com"
+        )
+        service.conn = mock_ldap.return_value
+        result = service.search_all_entries("(objectClass=*)")
+        assert isinstance(result, list)
+        assert len(result) == 1
 
-    def test_get_ldap_entries(self, mock_ldap):
-        """Test retrieving LDAP entries."""
-        from api.services.ldap_service import LDAPService
-        
-        service = LDAPService()
-        entries = service.get_entries(base_dn="dc=example,dc=com")
-        # Should return entries or empty list
-
-    def test_ldap_filter_parsing(self):
-        """Test LDAP filter parsing."""
-        from api.services.ldap_service import LDAPService
-        
-        service = LDAPService()
-        filters = [
-            "(objectClass=*)",
-            "(&(objectClass=inetOrgPerson)(cn=admin))",
-            "(|(uid=user1)(uid=user2))"
-        ]
-        for filter_str in filters:
-            # Should not raise exception
-            assert isinstance(filter_str, str)
+    def test_test_connection(self, mock_ldap):
+        """Test LDAP connection test helper."""
+        service = LDAPService(
+            host="ldap.example.com",
+            port=389,
+            use_ssl=False,
+            base_dn="dc=example,dc=com"
+        )
+        assert service.test_connection() is True

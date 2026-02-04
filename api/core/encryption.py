@@ -1,8 +1,11 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
+from typing import Optional
 import os
 import base64
+
+from api.core.config import settings
 
 
 class AESEncryption:
@@ -57,3 +60,15 @@ class AESEncryption:
         data = unpadder.update(padded_data) + unpadder.finalize()
         
         return data
+
+
+def encrypt_data(data: str, key: Optional[str] = None) -> str:
+    """Encrypt a UTF-8 string using the configured encryption key."""
+    encryption = AESEncryption(key or settings.ENCRYPTION_KEY)
+    return encryption.encrypt(data.encode("utf-8"))
+
+
+def decrypt_data(encrypted_data: str, key: Optional[str] = None) -> str:
+    """Decrypt a UTF-8 string using the configured encryption key."""
+    encryption = AESEncryption(key or settings.ENCRYPTION_KEY)
+    return encryption.decrypt(encrypted_data).decode("utf-8")
