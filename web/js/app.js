@@ -216,6 +216,9 @@ function restoreBackup(backupId) {
 async function loadAppVersion() {
     try {
         const response = await fetch(`${API_URL}/`);
+        if (!response.ok) {
+            throw new Error(`Failed to load app version: ${response.status} ${response.statusText}`);
+        }
         const data = await response.json();
         if (data.version) {
             document.getElementById('app-version').textContent = `v${data.version}`;
