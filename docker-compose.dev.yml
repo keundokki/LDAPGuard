@@ -38,5 +38,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://ldapguard:changeme@postgres:5432/ldapguard_dev
   
   web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
     volumes:
       - ./web:/usr/share/nginx/html:ro

@@ -37,9 +37,7 @@ services:
       - ldapguard-network
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    image: ghcr.io/keundokki/ldapguard-api:latest
     container_name: ldapguard-api
     environment:
       DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
@@ -66,9 +64,7 @@ services:
       - ldapguard-network
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    image: ghcr.io/keundokki/ldapguard-worker:latest
     container_name: ldapguard-worker
     environment:
       DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
@@ -87,9 +83,7 @@ services:
       - ldapguard-network
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
+    image: ghcr.io/keundokki/ldapguard-web:latest
     container_name: ldapguard-web
     environment:
       API_URL: http://api:8000
