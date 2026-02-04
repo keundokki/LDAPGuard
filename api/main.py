@@ -1,14 +1,15 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from api.core.config import settings
-from api.routes import auth, ldap_servers, backups, restores
+from api.routes import auth, backups, ldap_servers, restores
 from api.services.metrics_service import MetricsService
-import logging
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Multi-container Podman app for centralized LDAP backup/restore"
+    description="Multi-container Podman app for centralized LDAP backup/restore",
 )
 
 # CORS middleware
@@ -42,7 +43,7 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -52,7 +53,7 @@ async def health_check():
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
-        "version": settings.APP_VERSION
+        "version": settings.APP_VERSION,
     }
 
 

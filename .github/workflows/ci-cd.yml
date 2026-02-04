@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   # Test Python code and run unit tests
   test:
@@ -104,8 +108,6 @@ jobs:
   # Security scanning
   security:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
     
     steps:
     - uses: actions/checkout@v4

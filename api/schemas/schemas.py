@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
 from datetime import datetime
 from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserRole(str, Enum):
@@ -46,7 +47,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -89,7 +90,7 @@ class LDAPServerResponse(BaseModel):
     is_active: bool
     description: Optional[str]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -118,7 +119,7 @@ class BackupResponse(BackupBase):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -145,7 +146,7 @@ class RestoreJobResponse(RestoreJobBase):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -176,7 +177,7 @@ class ScheduledBackupResponse(ScheduledBackupBase):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
-    
+
     class Config:
         from_attributes = True
 

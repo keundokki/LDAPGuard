@@ -1,8 +1,11 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Enum, ForeignKey
+import enum
+
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer,
+                        String, Text)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from api.core.database import Base
-import enum
 
 
 class UserRole(str, enum.Enum):
@@ -25,7 +28,7 @@ class BackupStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
@@ -36,14 +39,14 @@ class User(Base):
     ldap_auth = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     backups = relationship("Backup", back_populates="created_by_user")
 
 
 class LDAPServer(Base):
     __tablename__ = "ldap_servers"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False)
     host = Column(String(255), nullable=False)
@@ -56,14 +59,14 @@ class LDAPServer(Base):
     description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     backups = relationship("Backup", back_populates="ldap_server")
 
 
 class Backup(Base):
     __tablename__ = "backups"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
     backup_type = Column(Enum(BackupType), default=BackupType.FULL, nullable=False)
@@ -73,22 +76,26 @@ class Backup(Base):
     encrypted = Column(Boolean, default=True, nullable=False)
     compression_enabled = Column(Boolean, default=True, nullable=False)
     entry_count = Column(Integer)  # Number of LDAP entries backed up
-    parent_backup_id = Column(Integer, ForeignKey("backups.id"))  # For incremental backups
+    parent_backup_id = Column(
+        Integer, ForeignKey("backups.id")
+    )  # For incremental backups
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     error_message = Column(Text)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     ldap_server = relationship("LDAPServer", back_populates="backups")
     created_by_user = relationship("User", back_populates="backups")
-    parent_backup = relationship("Backup", remote_side=[id], backref="incremental_backups")
+    parent_backup = relationship(
+        "Backup", remote_side=[id], backref="incremental_backups"
+    )
 
 
 class RestoreJob(Base):
     __tablename__ = "restore_jobs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     backup_id = Column(Integer, ForeignKey("backups.id"), nullable=False)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
@@ -106,7 +113,7 @@ class RestoreJob(Base):
 
 class ScheduledBackup(Base):
     __tablename__ = "scheduled_backups"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
@@ -120,7 +127,7 @@ class ScheduledBackup(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     action = Column(String(100), nullable=False)
