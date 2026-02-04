@@ -1,5 +1,8 @@
 FROM nginx:1.27-alpine
 
+# Update libxml2 to patch CVE-2025-6021
+RUN apk upgrade --no-cache libxml2
+
 # Copy static web files
 COPY web/ /usr/share/nginx/html/
 
