@@ -17,13 +17,6 @@ extend-exclude = '''
 )/
 '''
 
-[tool.isort]
-profile = "black"
-line_length = 88
-skip_gitignore = true
-known_first_party = ["api", "workers"]
-extend_skip_glob = ["*/migrations/*"]
-
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q"
