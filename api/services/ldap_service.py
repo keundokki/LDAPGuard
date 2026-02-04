@@ -1,8 +1,9 @@
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import ldap
+import ldap.ldapobject
 import ldap.modlist as modlist
 
 
@@ -24,7 +25,7 @@ class LDAPService:
         self.base_dn = base_dn
         self.bind_dn = bind_dn
         self.bind_password = bind_password
-        self.conn = None
+        self.conn: Optional[ldap.ldapobject.LDAPObject] = None
 
     def connect(self):
         """Establish connection to LDAP server."""
@@ -53,7 +54,7 @@ class LDAPService:
             self.connect()
 
         try:
-            result = self.conn.search_s(
+            result: List[Tuple[str, Dict]] = self.conn.search_s(  # type: ignore
                 self.base_dn, ldap.SCOPE_SUBTREE, search_filter, None
             )
             return result
@@ -102,16 +103,20 @@ class LDAPService:
         """Backup LDAP entries to JSON format."""
         entries = self.search_all_entries(search_filter)
 
-        json_data = []
+        json_data: List[Dict[str, Any]] = []
         for dn, attrs in entries:
             if dn is None:
                 continue
 
-            entry = {"dn": dn, "attributes": {}}
+            entry: Dict[str, Any] = {"dn": dn, "attributes": {}}
 
             for attr, values in attrs.items():
                 entry["attributes"][attr] = []
-                for value in values:
+                # values is bytes or list of bytes from LDAP
+                values_list: List[Any] = (
+                    values if isinstance(values, list) else [values]
+                )
+                for value in values_list:
                     if isinstance(value, bytes):
                         try:
                             entry["attributes"][attr].append(value.decode("utf-8"))
@@ -139,8 +144,8 @@ class LDAPService:
         restored_count = 0
 
         with open(input_path, "r", encoding="utf-8") as f:
-            current_dn = None
-            current_attrs = {}
+            current_dn: Optional[str] = None
+            current_attrs: Dict[str, List[str]] = {}
 
             for line in f:
                 line = line.rstrip("\n")
@@ -150,7 +155,7 @@ class LDAPService:
                     if current_dn and current_attrs:
                         try:
                             # Convert to LDAP modlist format
-                            ldif_attrs = {}
+                            ldif_attrs: Dict[str, List[bytes]] = {}
                             for attr, values in current_attrs.items():
                                 ldif_attrs[attr] = [
                                     v.encode("utf-8") if isinstance(v, str) else v
@@ -158,7 +163,9 @@ class LDAPService:
                                 ]
 
                             # Add entry
-                            self.conn.add_s(current_dn, modlist.addModlist(ldif_attrs))
+                            self.conn.add_s(  # type: ignore[union-attr]
+                                current_dn, modlist.addModlist(ldif_attrs)
+                            )
                             restored_count += 1
                         except ldap.ALREADY_EXISTS:
                             # Entry exists, skip

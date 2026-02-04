@@ -1,1 +1,2 @@
-# Empty __init__.py to make it a package
+"""LDAPGuard Workers - Background job processing for backups and restores."""
+

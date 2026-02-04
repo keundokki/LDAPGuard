@@ -1,12 +1,25 @@
+import re
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _get_version() -> str:
+    """Read version from api/__init__.py to avoid circular imports."""
+    try:
+        with open(__file__.replace("core/config.py", "__init__.py")) as f:
+            match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return "1.0.0"
+
+
 class Settings(BaseSettings):
     # Application
     APP_NAME: str = "LDAPGuard"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = _get_version()
     DEBUG: bool = False
 
     # Database

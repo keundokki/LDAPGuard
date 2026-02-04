@@ -2,15 +2,10 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
 
 import redis.asyncio as redis
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-
-# Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from sqlalchemy import select
 
 from api.core.config import settings
@@ -18,6 +13,9 @@ from api.core.database import AsyncSessionLocal
 from api.models.models import Backup, BackupStatus, ScheduledBackup
 from workers.tasks.backup_task import perform_backup
 from workers.tasks.restore_task import perform_restore
+
+# Add parent directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Configure logging
 logging.basicConfig(
@@ -48,7 +46,7 @@ class WorkerService:
         """Load scheduled backups from database and add to scheduler."""
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(ScheduledBackup).where(ScheduledBackup.is_active == True)
+                select(ScheduledBackup).where(ScheduledBackup.is_active)
             )
             scheduled_backups = result.scalars().all()
 

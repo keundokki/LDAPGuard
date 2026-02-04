@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -14,7 +13,6 @@ from api.schemas.schemas import (
     Token,
     UserCreate,
     UserResponse,
-    UserUpdate,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
