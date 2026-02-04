@@ -1,7 +1,11 @@
-FROM nginx:1.27-alpine
+# FROM nginx:alpine
+FROM nginx:1.27-alpine3.20
 
-# Update libxml2 to patch CVE-2025-6021
-RUN apk upgrade --no-cache libxml2
+# Update packages to fix vulnerabilities
+# Critical OpenSSL fixes: CVE-2025-15467, CVE-2024-12797, CVE-2025-69419, CVE-2025-69421
+# Critical libexpat fix: CVE-2026-24515
+# High severity fixes: libpng, libxslt, musl, xz-libs
+RUN apk upgrade --no-cache libssl3 libcrypto3 libexpat libxml2 libpng libxslt musl musl-utils xz-libs
 
 # Copy static web files
 COPY web/ /usr/share/nginx/html/
