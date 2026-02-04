@@ -1,0 +1,42 @@
+version: '3.8'
+
+# Development override for docker-compose
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=ldapguard_dev
+  
+  redis:
+    ports:
+      - "6379:6379"
+  
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    volumes:
+      - ./api:/app/api:ro
+      - ./migrations:/app/migrations:ro
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://ldapguard:changeme@postgres:5432/ldapguard_dev
+    command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+  
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    volumes:
+      - ./workers:/app/workers:ro
+      - ./api:/app/api:ro
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://ldapguard:changeme@postgres:5432/ldapguard_dev
+  
+  web:
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
