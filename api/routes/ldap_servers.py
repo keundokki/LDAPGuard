@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.models import LDAPServer
-from api.schemas.schemas import LDAPServerCreate, LDAPServerResponse, LDAPServerUpdate
+from api.schemas.schemas import (LDAPServerCreate, LDAPServerResponse,
+                                 LDAPServerUpdate)
 
 router = APIRouter(prefix="/ldap-servers", tags=["LDAP Servers"])
 
