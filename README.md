@@ -61,6 +61,7 @@
    # Edit .env with your configuration
    nano .env
    ```
+  > **Note**: Never commit `.env` files. They are gitignored by default.
 
 3. **Start services**:
    ```bash
