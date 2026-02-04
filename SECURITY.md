@@ -8,6 +8,20 @@ Currently supported versions with security updates:
 | ------- | ------------------ |
 | 1.0.x   | :white_check_mark: |
 
+## Recent Security Updates (v1.0.1)
+
+**February 2024** - All critical and high-severity vulnerabilities patched:
+
+- ✅ **cryptography** updated to 42.0.4 (was 41.0.7)
+  - Fixed NULL pointer dereference vulnerability
+  - Fixed Bleichenbacher timing oracle attack
+- ✅ **fastapi** updated to 0.109.1 (was 0.104.1)
+  - Fixed Content-Type Header ReDoS vulnerability
+- ✅ **python-multipart** updated to 0.0.22 (was 0.0.6)
+  - Fixed Arbitrary File Write vulnerability
+  - Fixed DoS vulnerability
+  - Fixed Content-Type Header ReDoS vulnerability
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability within LDAPGuard, please send an email to security@example.com. All security vulnerabilities will be promptly addressed.
