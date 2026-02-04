@@ -11,6 +11,7 @@ RUN apk add --no-cache --update \
     libsasl \
     cyrus-sasl-dev \
     curl \
+    git \
     && rm -rf /var/cache/apk/*
 
 # Copy requirements

@@ -10,6 +10,7 @@ RUN apk add --no-cache --update \
     openldap-dev \
     libsasl \
     cyrus-sasl-dev \
+    git \
     && rm -rf /var/cache/apk/*
 
 # Copy requirements
