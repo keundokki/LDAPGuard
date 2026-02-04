@@ -47,8 +47,14 @@ async function loadDashboard() {
     try {
         // Load stats
         const [servers, backups] = await Promise.all([
-            fetch(`${API_URL}/ldap-servers/`).then(r => r.json()),
-            fetch(`${API_URL}/backups/`).then(r => r.json())
+            fetch(`${API_URL}/ldap-servers/`).then(r => {
+                if (!r.ok) throw new Error(`Failed to load servers: ${r.status} ${r.statusText}`);
+                return r.json();
+            }),
+            fetch(`${API_URL}/backups/`).then(r => {
+                if (!r.ok) throw new Error(`Failed to load backups: ${r.status} ${r.statusText}`);
+                return r.json();
+            })
         ]);
         
         document.getElementById('total-servers').textContent = servers.length;
@@ -72,6 +78,9 @@ async function loadDashboard() {
 async function loadServers() {
     try {
         const response = await fetch(`${API_URL}/ldap-servers/`);
+        if (!response.ok) {
+            throw new Error(`Failed to load servers: ${response.status} ${response.statusText}`);
+        }
         const servers = await response.json();
         
         const tbody = document.getElementById('servers-tbody');
@@ -106,6 +115,9 @@ async function loadServers() {
 async function loadBackups() {
     try {
         const response = await fetch(`${API_URL}/backups/`);
+        if (!response.ok) {
+            throw new Error(`Failed to load backups: ${response.status} ${response.statusText}`);
+        }
         const backups = await response.json();
         
         const tbody = document.getElementById('backups-tbody');
@@ -144,6 +156,9 @@ async function loadBackups() {
 async function loadRestores() {
     try {
         const response = await fetch(`${API_URL}/restores/`);
+        if (!response.ok) {
+            throw new Error(`Failed to load restores: ${response.status} ${response.statusText}`);
+        }
         const restores = await response.json();
         
         const tbody = document.getElementById('restores-tbody');
