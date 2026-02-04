@@ -2,6 +2,12 @@
 
 All notable changes to LDAPGuard will be documented in this file.
 
+## [0.0.3] - 2026-02-04
+
+### Fixed
+- Fixed web UI displaying incorrect version (now fetches dynamically from API)
+- Web footer now shows correct version matching the API
+
 ## [0.0.2] - 2026-02-04
 
 ### Fixed
