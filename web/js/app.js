@@ -212,9 +212,23 @@ function restoreBackup(backupId) {
     alert(`Restore backup ${backupId} - to be implemented`);
 }
 
+// Fetch and display app version
+async function loadAppVersion() {
+    try {
+        const response = await fetch(`${API_URL}/`);
+        const data = await response.json();
+        if (data.version) {
+            document.getElementById('app-version').textContent = `v${data.version}`;
+        }
+    } catch (error) {
+        console.error('Failed to load app version:', error);
+    }
+}
+
 // Initialize dashboard on load
 window.addEventListener('DOMContentLoaded', () => {
     loadDashboard();
+    loadAppVersion();
 });
 
 // Auto-refresh every 30 seconds
