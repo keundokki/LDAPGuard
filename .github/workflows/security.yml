@@ -8,11 +8,13 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # Weekly scan
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   security:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
     
     steps:
     - uses: actions/checkout@v4
@@ -50,8 +52,6 @@ jobs:
 
   container-scan:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
     strategy:
       matrix:
         dockerfile:
