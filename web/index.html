@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LDAPGuard - LDAP Backup & Restore</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 LDAPGuard</h1>
+            <p class="subtitle">Centralized LDAP Backup & Restore Solution</p>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="servers">LDAP Servers</button>
+            <button class="nav-tab" data-tab="backups">Backups</button>
+            <button class="nav-tab" data-tab="restores">Restores</button>
+            <button class="nav-tab" data-tab="scheduled">Scheduled</button>
+        </nav>
+
+        <main>
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <h2>Dashboard</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Backups</h3>
+                        <p class="stat-value" id="total-backups">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>LDAP Servers</h3>
+                        <p class="stat-value" id="total-servers">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Active Jobs</h3>
+                        <p class="stat-value" id="active-jobs">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Last Backup</h3>
+                        <p class="stat-value" id="last-backup">Never</p>
+                    </div>
+                </div>
+
+                <h3>Recent Activity</h3>
+                <div class="activity-list" id="recent-activity">
+                    <p class="no-data">No recent activity</p>
+                </div>
+            </div>
+
+            <!-- LDAP Servers Tab -->
+            <div id="servers" class="tab-content">
+                <div class="section-header">
+                    <h2>LDAP Servers</h2>
+                    <button class="btn btn-primary" onclick="showAddServerModal()">+ Add Server</button>
+                </div>
+                <div class="table-container">
+                    <table id="servers-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Host</th>
+                                <th>Port</th>
+                                <th>Base DN</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="servers-tbody">
+                            <tr>
+                                <td colspan="6" class="no-data">No LDAP servers configured</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Backups Tab -->
+            <div id="backups" class="tab-content">
+                <div class="section-header">
+                    <h2>Backups</h2>
+                    <button class="btn btn-primary" onclick="showCreateBackupModal()">+ Create Backup</button>
+                </div>
+                <div class="table-container">
+                    <table id="backups-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Server</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Size</th>
+                                <th>Entries</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backups-tbody">
+                            <tr>
+                                <td colspan="8" class="no-data">No backups found</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Restores Tab -->
+            <div id="restores" class="tab-content">
+                <div class="section-header">
+                    <h2>Restore Jobs</h2>
+                    <button class="btn btn-primary" onclick="showCreateRestoreModal()">+ Create Restore</button>
+                </div>
+                <div class="table-container">
+                    <table id="restores-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Backup ID</th>
+                                <th>Server</th>
+                                <th>Status</th>
+                                <th>Entries Restored</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="restores-tbody">
+                            <tr>
+                                <td colspan="7" class="no-data">No restore jobs found</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Scheduled Backups Tab -->
+            <div id="scheduled" class="tab-content">
+                <div class="section-header">
+                    <h2>Scheduled Backups</h2>
+                    <button class="btn btn-primary" onclick="showScheduleModal()">+ Schedule Backup</button>
+                </div>
+                <div class="table-container">
+                    <table id="scheduled-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Server</th>
+                                <th>Schedule</th>
+                                <th>Type</th>
+                                <th>Retention (days)</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduled-tbody">
+                            <tr>
+                                <td colspan="7" class="no-data">No scheduled backups</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>LDAPGuard v1.0.0 | <a href="/metrics" target="_blank">Metrics</a> | <a href="/health" target="_blank">Health</a></p>
+        </footer>
+    </div>
+
+    <!-- Modals would go here -->
+
+    <script src="js/app.js"></script>
+</body>
+</html>

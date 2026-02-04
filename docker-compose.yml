@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ldapguard-postgres
+    environment:
+      POSTGRES_DB: ldapguard
+      POSTGRES_USER: ldapguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ldapguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ldapguard-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ldapguard-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ldapguard-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ldapguard-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-your-encryption-key-32-bytes-min}
+    volumes:
+      - ./config:/app/config
+      - backup_data:/app/backups
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ldapguard-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: ldapguard-worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-your-encryption-key-32-bytes-min}
+    volumes:
+      - ./config:/app/config
+      - backup_data:/app/backups
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ldapguard-network
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: ldapguard-web
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - ldapguard-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backup_data:
+
+networks:
+  ldapguard-network:
+    driver: bridge
