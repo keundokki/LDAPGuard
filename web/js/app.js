@@ -1,14 +1,6 @@
 // API base URL
 const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || window.API_URL || '/api';
 
-// HTML escaping to prevent XSS
-function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Auth helper functions
 function getAuthToken() {
     return localStorage.getItem('auth_token');
@@ -309,13 +301,14 @@ async function loadBackups() {
                 <td>Server #${parseInt(backup.ldap_server_id)}</td>
                 <td>${escapeHtml(backup.backup_type)}</td>
                 <td>
-                    <span class="status-badge status-${escapeHtml(backup.status).replace('_', '-')}">
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
+                    <span class="status-badge status-${backup.status.replace('_', '-')}">
                         ${escapeHtml(backup.status)}
                     </span>
                 </td>
-                <td>${backup.file_size ? escapeHtml(formatBytes(backup.file_size)) : 'N/A'}</td>
+                <td>${backup.file_size ? formatBytes(backup.file_size) : 'N/A'}</td>
                 <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
-                <td>${escapeHtml(new Date(backup.created_at).toLocaleString())}</td>
+                <td>${new Date(backup.created_at).toLocaleString()}</td>
                 <td>
                     ${backup.status === 'completed' ? 
                         `<button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
@@ -352,12 +345,13 @@ async function loadRestores() {
                 <td>${parseInt(restore.backup_id)}</td>
                 <td>Server #${parseInt(restore.ldap_server_id)}</td>
                 <td>
-                    <span class="status-badge status-${escapeHtml(restore.status).replace('_', '-')}">
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
+                    <span class="status-badge status-${restore.status.replace('_', '-')}">
                         ${escapeHtml(restore.status)}
                     </span>
                 </td>
                 <td>${restore.entries_restored ? parseInt(restore.entries_restored) : 'N/A'}</td>
-                <td>${escapeHtml(new Date(restore.created_at).toLocaleString())}</td>
+                <td>${new Date(restore.created_at).toLocaleString()}</td>
                 <td>-</td>
             </tr>
         `).join('');
