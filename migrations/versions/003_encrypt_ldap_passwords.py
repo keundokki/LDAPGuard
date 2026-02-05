@@ -18,11 +18,16 @@ depends_on = None
 
 def upgrade():
     """
-    This migration adds encryption awareness for bind_password column.
-    Note: Actual data encryption will be handled by the application layer.
-    The column remains String(500) but will store encrypted data.
-    
-    To encrypt existing passwords, run the encrypt_passwords management command.
+    This migration adds encryption awareness for the bind_password column.
+    Note: actual data encryption is handled by the application layer; this
+    migration only adds the password_encrypted flag and does not modify
+    existing bind_password values.
+
+    After applying this migration, administrators must ensure that any
+    existing LDAP bind passwords are re-saved through the application or
+    updated via an administrative script that uses the application's normal
+    password-encryption utilities, so that bind_password is stored in
+    encrypted form and password_encrypted is set appropriately.
     """
     # Add a flag to track if password is encrypted
     op.add_column('ldap_servers', 

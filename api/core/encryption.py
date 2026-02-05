@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 from typing import Optional
 
@@ -7,6 +8,8 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from api.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class AESEncryption:
@@ -86,7 +89,9 @@ def decrypt_ldap_password(encrypted_password: Optional[str], is_encrypted: bool 
         encryption = get_encryption_service()
         decrypted_bytes = encryption.decrypt(encrypted_password)
         return decrypted_bytes.decode('utf-8')
-    except Exception:
+    except Exception as e:
+        # Log decryption failure with context for debugging
+        logger.error(f"Failed to decrypt LDAP password: {str(e)}")
         # If decryption fails, return None to avoid crashes
         return None
 

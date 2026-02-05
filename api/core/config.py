@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     BACKUP_RETENTION_DAYS: int = 30
     INCREMENTAL_BACKUP_ENABLED: bool = True
 
+    # CORS
+    CORS_ALLOWED_ORIGINS: Optional[str] = None
+
     # Webhooks
     WEBHOOK_ENABLED: bool = False
     WEBHOOK_URL: Optional[str] = None
