@@ -11,7 +11,6 @@ from api.models.models import (
     LDAPServer,
     ScheduledBackup,
     User,
-    UserRole,
 )
 from api.schemas.schemas import (
     ConfigurationExport,
