@@ -7,10 +7,20 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="mainApp" style="display: none;">
         <header>
-            <h1>🔒 LDAPGuard</h1>
-            <p class="subtitle">Centralized LDAP Backup & Restore Solution</p>
+            <div class="header-content">
+                <div>
+                    <h1>🔒 LDAPGuard</h1>
+                    <p class="subtitle">Centralized LDAP Backup & Restore Solution</p>
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+                    <span id="auth-status" class="auth-status">Not signed in</span>
+                    <button class="btn btn-secondary" id="login-button" onclick="showLoginModal()">Login</button>
+                    <button class="btn btn-danger" id="logout-button" onclick="logout()" style="display: none;">Logout</button>
+                </div>
+            </div>
         </header>
 
         <nav class="nav-tabs">
@@ -19,6 +29,7 @@
             <button class="nav-tab" data-tab="backups">Backups</button>
             <button class="nav-tab" data-tab="restores">Restores</button>
             <button class="nav-tab" data-tab="scheduled">Scheduled</button>
+            <button class="nav-tab" data-tab="admin">Admin</button>
         </nav>
 
         <main>
@@ -56,6 +67,14 @@
                     <h2>LDAP Servers</h2>
                     <button class="btn btn-primary" onclick="showAddServerModal()">+ Add Server</button>
                 </div>
+                <div class="table-controls">
+                    <input type="text" id="servers-search" placeholder="Search servers...">
+                    <div class="pagination">
+                        <button class="btn btn-secondary" id="servers-prev">Prev</button>
+                        <span id="servers-page">1</span>
+                        <button class="btn btn-secondary" id="servers-next">Next</button>
+                    </div>
+                </div>
                 <div class="table-container">
                     <table id="servers-table">
                         <thead>
@@ -83,10 +102,20 @@
                     <h2>Backups</h2>
                     <button class="btn btn-primary" onclick="showCreateBackupModal()">+ Create Backup</button>
                 </div>
+                <div class="table-controls">
+                    <input type="text" id="backups-search" placeholder="Search backups...">
+                    <button class="btn btn-danger" id="batch-delete-btn" onclick="batchDeleteBackups()" style="display:none;">🗑️ Delete Selected</button>
+                    <div class="pagination">
+                        <button class="btn btn-secondary" id="backups-prev">Prev</button>
+                        <span id="backups-page">1</span>
+                        <button class="btn btn-secondary" id="backups-next">Next</button>
+                    </div>
+                </div>
                 <div class="table-container">
                     <table id="backups-table">
                         <thead>
                             <tr>
+                                <th><input type="checkbox" id="select-all-backups" onchange="toggleAllBackups(this)"></th>
                                 <th>ID</th>
                                 <th>Server</th>
                                 <th>Type</th>
@@ -99,7 +128,7 @@
                         </thead>
                         <tbody id="backups-tbody">
                             <tr>
-                                <td colspan="8" class="no-data">No backups found</td>
+                                <td colspan="9" class="no-data">No backups found</td>
                             </tr>
                         </tbody>
                     </table>
@@ -161,6 +190,179 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Admin Tab -->
+            <div id="admin" class="tab-content">
+                <h2>Administration</h2>
+                
+                <!-- Admin Navigation -->
+                <div class="admin-nav">
+                    <button class="admin-nav-btn active" data-section="users" onclick="showAdminSection('users')">Users</button>
+                    <button class="admin-nav-btn" data-section="audit" onclick="showAdminSection('audit')">Audit Log</button>
+                    <button class="admin-nav-btn" data-section="api-keys" onclick="showAdminSection('api-keys')">API Keys</button>
+                    <button class="admin-nav-btn" data-section="notifications" onclick="showAdminSection('notifications')">Notifications</button>
+                    <button class="admin-nav-btn" data-section="settings" onclick="showAdminSection('settings')">Settings</button>
+                </div>
+
+                <!-- Users Section -->
+                <div id="admin-users" class="admin-section active">
+                    <div class="section-header">
+                        <h3>User Management</h3>
+                        <button class="btn btn-primary" onclick="showCreateUserModal()">+ Create User</button>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody">
+                            <tr><td colspan="7" class="no-data">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Audit Log Section -->
+                <div id="admin-audit" class="admin-section">
+                    <div class="section-header">
+                        <h3>Audit Log</h3>
+                        <div class="table-controls">
+                            <input type="text" id="audit-search" placeholder="Search audit logs...">
+                            <select id="audit-filter" onchange="loadAuditLogs()">
+                                <option value="all">All Actions</option>
+                                <option value="create">Create</option>
+                                <option value="update">Update</option>
+                                <option value="delete">Delete</option>
+                                <option value="login">Login</option>
+                            </select>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>Details</th>
+                                <th>IP Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-tbody">
+                            <tr><td colspan="6" class="no-data">No audit logs available</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- API Keys Section -->
+                <div id="admin-api-keys" class="admin-section">
+                    <div class="section-header">
+                        <h3>API Keys</h3>
+                        <button class="btn btn-primary" onclick="showCreateApiKeyModal()">+ Generate API Key</button>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Key</th>
+                                <th>Permissions</th>
+                                <th>Created</th>
+                                <th>Expires</th>
+                                <th>Last Used</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apikeys-tbody">
+                            <tr><td colspan="7" class="no-data">No API keys configured</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Notifications Section -->
+                <div id="admin-notifications" class="admin-section">
+                    <div class="section-header">
+                        <h3>Notification Settings</h3>
+                        <button class="btn btn-primary" onclick="saveNotificationSettings()">💾 Save Settings</button>
+                    </div>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="notify-backup-success"> 
+                                Notify on backup success
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="notify-backup-failure" checked> 
+                                Notify on backup failure
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="notify-restore-complete"> 
+                                Notify on restore completion
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="email-recipients">Email Recipients</label>
+                            <input type="text" id="email-recipients" placeholder="admin@example.com, ops@example.com">
+                            <small class="help-text">Comma-separated email addresses</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="webhook-url">Webhook URL</label>
+                            <input type="url" id="webhook-url" placeholder="https://hooks.slack.com/services/...">
+                            <small class="help-text">Slack, Discord, Teams webhook URL</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Section -->
+                <div id="admin-settings" class="admin-section">
+                    <div class="section-header">
+                        <h3>System Settings</h3>
+                        <div>
+                            <button class="btn btn-primary" onclick="exportConfiguration()">📥 Export Config</button>
+                            <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">📤 Import Config</button>
+                            <input type="file" id="import-file" style="display: none" accept=".json" onchange="importConfiguration(event)">
+                        </div>
+                    </div>
+                    <div class="settings-form">
+                        <h4>Backup Settings</h4>
+                        <div class="form-group">
+                            <label for="default-retention">Default Retention (days)</label>
+                            <input type="number" id="default-retention" value="30" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="backup-path">Backup Storage Path</label>
+                            <input type="text" id="backup-path" value="/data/backups" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="auto-verify" checked> 
+                                Auto-verify backups after creation
+                            </label>
+                        </div>
+                        <h4>Security Settings</h4>
+                        <div class="form-group">
+                            <label for="session-timeout">Session Timeout (minutes)</label>
+                            <input type="number" id="session-timeout" value="60" min="5">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="require-2fa"> 
+                                Enable 2FA (optional for users)
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSystemSettings()">💾 Save Settings</button>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <footer>
@@ -168,8 +370,330 @@
         </footer>
     </div>
 
-    <!-- Modals would go here -->
+    <!-- Add LDAP Server Modal -->
+    <div id="addServerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddServerModal()">&times;</span>
+            <h2>Add LDAP Server</h2>
+            <form id="addServerForm" onsubmit="handleAddServer(event)">
+                <div class="form-group">
+                    <label for="serverName">Server Name *</label>
+                    <input type="text" id="serverName" required placeholder="e.g., Production LDAP">
+                </div>
+                
+                <div class="form-group">
+                    <label for="serverHost">Host *</label>
+                    <input type="text" id="serverHost" required placeholder="ldap.example.com">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="serverPort">Port *</label>
+                        <input type="number" id="serverPort" value="389" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="serverSSL">Use SSL/TLS</label>
+                        <input type="checkbox" id="serverSSL" onchange="updatePort(this)">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="serverBaseDN">Base DN *</label>
+                    <input type="text" id="serverBaseDN" required placeholder="dc=example,dc=com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="serverBindDN">Bind DN (optional)</label>
+                    <input type="text" id="serverBindDN" placeholder="cn=admin,dc=example,dc=com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="serverBindPassword">Bind Password (optional)</label>
+                    <input type="password" id="serverBindPassword" placeholder="Enter password">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddServerModal()">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="testLDAPConnection()">🔍 Test Connection</button>
+                    <button type="submit" class="btn btn-primary">Add Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Backup Modal -->
+    <div id="createBackupModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateBackupModal()">&times;</span>
+            <h2>Create Backup</h2>
+            <form id="createBackupForm" onsubmit="handleCreateBackup(event)">
+                <div class="form-group">
+                    <label for="backupServerId">LDAP Server *</label>
+                    <select id="backupServerId" required>
+                        <option value="">Loading servers...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="backupType">Backup Type</label>
+                    <select id="backupType">
+                        <option value="full">Full</option>
+                        <option value="incremental">Incremental</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="backupEncrypted" checked>
+                        Encrypt backup
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="backupCompression" checked>
+                        Enable compression
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateBackupModal()">Cancel</button>
+                    <button type="submit" id="createBackupSubmit" class="btn btn-primary">Create Backup</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Restore Modal -->
+    <div id="createRestoreModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateRestoreModal()">&times;</span>
+            <h2>Create Restore</h2>
+            <form id="createRestoreForm" onsubmit="handleCreateRestore(event)">
+                <div class="form-group">
+                    <label for="restoreBackupId">Backup *</label>
+                    <select id="restoreBackupId" required>
+                        <option value="">Loading backups...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="restoreServerId">Target LDAP Server *</label>
+                    <select id="restoreServerId" required>
+                        <option value="">Loading servers...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="restoreSelective" onchange="toggleRestoreFilter()">
+                        Selective restore
+                    </label>
+                </div>
+
+                <div class="form-group" id="restoreFilterGroup" style="display: none;">
+                    <label for="restoreFilter">LDAP Filter</label>
+                    <input type="text" id="restoreFilter" placeholder="(objectClass=person)">
+                </div>
+
+                <div class="form-group">
+                    <label for="restorePointInTime">Point-in-time (optional)</label>
+                    <input type="datetime-local" id="restorePointInTime">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateRestoreModal()">Cancel</button>
+                    <button type="submit" id="createRestoreSubmit" class="btn btn-primary">Create Restore</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Schedule Modal -->
+    <div id="createScheduleModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateScheduleModal()">&times;</span>
+            <h2 id="scheduleModalTitle">Schedule Backup</h2>
+            <form id="createScheduleForm" onsubmit="handleCreateSchedule(event)">
+                <input type="hidden" id="scheduleId">
+                <div class="form-group">
+                    <label for="scheduleName">Schedule Name *</label>
+                    <input type="text" id="scheduleName" required placeholder="e.g., Nightly Full Backup">
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduleServerId">LDAP Server *</label>
+                    <select id="scheduleServerId" required>
+                        <option value="">Loading servers...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduleType">Backup Type</label>
+                    <select id="scheduleType">
+                        <option value="full">Full</option>
+                        <option value="incremental">Incremental</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduleCron">Cron Expression *</label>
+                    <input type="text" id="scheduleCron" required placeholder="0 2 * * *">
+                    <small class="help-text">Example: 0 2 * * * (daily at 02:00)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduleRetention">Retention Days</label>
+                    <input type="number" id="scheduleRetention" value="30" min="1">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateScheduleModal()">Cancel</button>
+                    <button type="submit" id="createScheduleSubmit" class="btn btn-primary">Create Schedule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="createUserModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateUserModal()">&times;</span>
+            <h2>Create New User</h2>
+            <form id="createUserForm" onsubmit="handleCreateUser(event)">
+                <div class="form-group">
+                    <label for="newUsername">Username *</label>
+                    <input type="text" id="newUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="newEmail">Email *</label>
+                    <input type="email" id="newEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Password *</label>
+                    <input type="password" id="newPassword" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="newFullName">Full Name</label>
+                    <input type="text" id="newFullName">
+                </div>
+                <div class="form-group">
+                    <label for="newRole">Role *</label>
+                    <select id="newRole" required>
+                        <option value="viewer">Viewer</option>
+                        <option value="operator">Operator</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditUserModal()">&times;</span>
+            <h2>Edit User</h2>
+            <form id="editUserForm" onsubmit="handleEditUser(event)">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label for="editUsername">Username</label>
+                    <input type="text" id="editUsername" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="editEmail">Email *</label>
+                    <input type="email" id="editEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="editFullName">Full Name</label>
+                    <input type="text" id="editFullName">
+                </div>
+                <div class="form-group">
+                    <label for="editRole">Role *</label>
+                    <select id="editRole" required>
+                        <option value="viewer">Viewer</option>
+                        <option value="operator">Operator</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editIsActive">Status</label>
+                    <select id="editIsActive" required>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create API Key Modal -->
+    <div id="createApiKeyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateApiKeyModal()">&times;</span>
+            <h2>Generate API Key</h2>
+            <form id="createApiKeyForm" onsubmit="handleCreateApiKey(event)">
+                <div class="form-group">
+                    <label for="apiKeyName">Key Name *</label>
+                    <input type="text" id="apiKeyName" required placeholder="Production API Key">
+                </div>
+                <div class="form-group">
+                    <label for="apiKeyExpires">Expires In</label>
+                    <select id="apiKeyExpires">
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">1 year</option>
+                        <option value="0">Never</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Permissions</label>
+                    <label><input type="checkbox" name="apiKeyPerms" value="read" checked> Read</label>
+                    <label><input type="checkbox" name="apiKeyPerms" value="write"> Write</label>
+                    <label><input type="checkbox" name="apiKeyPerms" value="delete"> Delete</label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateApiKeyModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Generate Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>🔒 LDAPGuard - Sign In</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">Please sign in to access the application.</p>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="js/app.js"></script>
+    <script src="js/batch-operations.js"></script>
+    <script src="js/admin.js"></script>
 </body>
 </html>

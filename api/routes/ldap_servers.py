@@ -1,14 +1,28 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.core.security import get_current_user
 from api.models.models import LDAPServer
 from api.schemas.schemas import LDAPServerCreate, LDAPServerResponse, LDAPServerUpdate
+from api.services.ldap_service import LDAPService
 
 router = APIRouter(prefix="/ldap-servers", tags=["LDAP Servers"])
+
+
+class LDAPTestConnection(BaseModel):
+    """Schema for testing LDAP connection."""
+
+    host: str
+    port: int
+    use_ssl: bool = False
+    base_dn: str
+    bind_dn: str | None = None
+    bind_password: str | None = None
 
 
 @router.get("/", response_model=List[LDAPServerResponse])
@@ -37,7 +51,9 @@ async def get_ldap_server(server_id: int, db: AsyncSession = Depends(get_db)):
     "/", response_model=LDAPServerResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_ldap_server(
-    server_data: LDAPServerCreate, db: AsyncSession = Depends(get_db)
+    server_data: LDAPServerCreate,
+    db: AsyncSession = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ):
     """Create a new LDAP server configuration."""
     # Check if name exists
@@ -52,6 +68,22 @@ async def create_ldap_server(
             detail="LDAP server with this name already exists",
         )
 
+    # Test connection before saving
+    ldap_service = LDAPService(
+        host=server_data.host,
+        port=server_data.port,
+        use_ssl=server_data.use_ssl,
+        bind_dn=server_data.bind_dn,
+        bind_password=server_data.bind_password,
+        base_dn=server_data.base_dn,
+    )
+
+    if not ldap_service.test_connection():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to connect to LDAP server. Please check your credentials and connection settings.",
+        )
+
     new_server = LDAPServer(**server_data.model_dump())
     db.add(new_server)
     await db.commit()
@@ -62,7 +94,10 @@ async def create_ldap_server(
 
 @router.put("/{server_id}", response_model=LDAPServerResponse)
 async def update_ldap_server(
-    server_id: int, server_data: LDAPServerUpdate, db: AsyncSession = Depends(get_db)
+    server_id: int,
+    server_data: LDAPServerUpdate,
+    db: AsyncSession = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ):
     """Update LDAP server configuration."""
     result = await db.execute(select(LDAPServer).where(LDAPServer.id == server_id))
@@ -98,3 +133,40 @@ async def delete_ldap_server(server_id: int, db: AsyncSession = Depends(get_db))
     await db.commit()
 
     return None
+
+@router.post("/test")
+async def test_ldap_connection(
+    test_data: LDAPTestConnection,
+    _current_user=Depends(get_current_user),
+):
+    """Test LDAP connection with provided credentials."""
+    try:
+        # Create a temporary service instance to test the connection
+        ldap_service = LDAPService(
+            host=test_data.host,
+            port=test_data.port,
+            use_ssl=test_data.use_ssl,
+            base_dn=test_data.base_dn,
+            bind_dn=test_data.bind_dn,
+            bind_password=test_data.bind_password,
+        )
+        
+        # Try to connect and get basic info
+        entries = await ldap_service.search_entries(
+            search_filter="(objectClass=*)",
+            attributes=["dn"],
+            size_limit=1
+        )
+        
+        entry_count = len(entries) if entries else 0
+        
+        return {
+            "status": "success",
+            "message": f"Successfully connected to LDAP server. Found {entry_count} entries.",
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Connection test failed: {str(e)}"
+        )

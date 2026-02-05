@@ -23,7 +23,7 @@ services:
       - ./migrations:/app/migrations:ro
     environment:
       - DEBUG=true
-      - DATABASE_URL=postgresql+asyncpg://ldapguard:changeme@postgres:5432/ldapguard_dev
+      - DATABASE_URL=postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard_dev
     command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
   
   worker:
@@ -35,7 +35,7 @@ services:
       - ./api:/app/api:ro
     environment:
       - DEBUG=true
-      - DATABASE_URL=postgresql+asyncpg://ldapguard:changeme@postgres:5432/ldapguard_dev
+      - DATABASE_URL=postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard_dev
   
   web:
     build:

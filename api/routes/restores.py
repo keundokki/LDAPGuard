@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
-from api.models.models import Backup, RestoreJob
+from api.core.security import get_current_user
+from api.models.models import Backup, BackupStatus, RestoreJob
 from api.schemas.schemas import RestoreJobCreate, RestoreJobResponse
 
 router = APIRouter(prefix="/restores", tags=["Restores"])
@@ -44,7 +45,9 @@ async def get_restore_job(restore_id: int, db: AsyncSession = Depends(get_db)):
     "/", response_model=RestoreJobResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_restore_job(
-    restore_data: RestoreJobCreate, db: AsyncSession = Depends(get_db)
+    restore_data: RestoreJobCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """Create a new restore job."""
     # Verify backup exists
@@ -56,6 +59,12 @@ async def create_restore_job(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found"
         )
 
+    if backup.status != BackupStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Restore is only allowed for completed backups",
+        )
+
     # Create restore job
     new_job = RestoreJob(
         backup_id=restore_data.backup_id,
@@ -63,7 +72,7 @@ async def create_restore_job(
         selective_restore=restore_data.selective_restore,
         restore_filter=restore_data.restore_filter,
         point_in_time=restore_data.point_in_time,
-        created_by=1,  # TODO: Get from authenticated user
+        created_by=current_user.id,
     )
 
     db.add(new_job)
