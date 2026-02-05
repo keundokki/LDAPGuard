@@ -1,14 +1,64 @@
-# Testing Staging + Production LDAPGuard
+# Testing LDAPGuard - Staging with Mock LDAP, Production Ready
 
-Just 6 simple tests to verify everything works.
+## Environment Setup
+
+**Staging**: Mock OpenLDAP + LDAPGuard (dev/testing)
+**Production**: LDAPGuard only (add real LDAP servers via UI)
 
 ---
 
-## Test 1: Manual Backup
+## Staging: Add Mock LDAP Server via Web UI
 
-### Steps
+### Access Staging
+```
+Web UI: http://staging-vm:8081
+API: http://staging-vm:8001
+```
+
+### Add Test LDAP Server
+
+1. Login (admin/admin)
+2. LDAP Servers → Add Server
+3. Fill in:
+   - **Name**: Test LDAP
+   - **Host**: openldap (docker container name on staging)
+   - **Port**: 389
+   - **Bind DN**: cn=admin,dc=test,dc=local
+   - **Bind Password**: admin
+   - **Base DN**: dc=test,dc=local
+
+4. Click "Test Connection"
+   - Should succeed ✅
+
+---
+
+## Test 1: Connection Test
+
+### Verify Mock LDAP is accessible
+
 ```bash
-# Get API token
+# From inside staging network
+docker exec ldapguard-staging-ldap ldapwhoami \
+  -H ldap://localhost \
+  -D cn=admin,dc=test,dc=local \
+  -w admin
+
+# Should show: dn:cn=admin,dc=test,dc=local
+```
+
+### Success
+✅ Connection successful from LDAPGuard
+
+---
+
+## Test 2: Manual Backup
+
+## Test 2: Manual Backup
+
+### Create backup of mock LDAP
+
+```bash
+# Get token
 TOKEN=$(curl -X POST http://staging-vm:8001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin"}' \
@@ -18,7 +68,7 @@ TOKEN=$(curl -X POST http://staging-vm:8001/api/auth/login \
 curl -X POST http://staging-vm:8001/api/backups \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"ldap_server_id": 1}'
+  -d '{"ldap_server_id": 1, "backup_name": "test-backup-1"}'
 
 # List backups
 curl http://staging-vm:8001/api/backups \
@@ -26,87 +76,158 @@ curl http://staging-vm:8001/api/backups \
 ```
 
 ### Success
-✅ Backup created with timestamp
+✅ Backup created (encrypted .enc file)
 ✅ Status shows "completed"
+✅ Timestamp recorded
 
 ---
 
-## Test 2: List Backups
+## Test 3: List Users from LDAP
 
-### Steps
+### Query test data in LDAPGuard
+
 ```bash
-curl http://staging-vm:8001/api/backups \
+# Get users from LDAP (via LDAPGuard)
+curl http://staging-vm:8001/api/ldap-servers/1/users \
   -H "Authorization: Bearer $TOKEN"
+
+# Expected: 8 users (alice, bob, charlie, diana, eve, frank, grace, testadmin)
 ```
 
 ### Success
-✅ All backups listed
-✅ Metadata shows size, date, status
+✅ Users listed from mock LDAP
+✅ All 8 test users visible
 
 ---
 
-## Test 3: Restore Backup
+## Test 4: Restore Backup
 
-### Steps
+## Test 4: Restore Backup
+
+### Test restoration
+
 ```bash
-# Get backup ID from previous test
+# Get backup ID (from Test 2)
 BACKUP_ID=1
 
 # Initiate restore
 curl -X POST http://staging-vm:8001/api/restores \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"backup_id": '$BACKUP_ID', "target_ldap_server_id": 2}'
+  -d '{"backup_id": '$BACKUP_ID', "target_ldap_server_id": 1}'
 
-# Check status
+# Check restore status
 curl http://staging-vm:8001/api/restores \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Success
-✅ Restore initiated (status: pending → running → completed)
+✅ Restore initiated
+✅ Status shows "completed"
 ✅ No errors in logs
 
 ---
 
-## Test 4: Rate Limiting
+## Test 5: Rate Limiting
 
-### Steps
+## Test 5: Rate Limiting
+
+### Verify rate limiting works
+
 ```bash
 # Try 6 rapid login attempts
 for i in {1..6}; do
   curl -X POST http://staging-vm:8001/api/auth/login \
     -H "Content-Type: application/json" \
     -d '{"username":"admin","password":"wrong"}' \
-    -w "\nAttempt $i: HTTP %{http_code}\n"
+    -w "\nAttempt $i: HTTP %{http_code}\n" \
+    -s -o /dev/null
 done
+
+# Expected: 200/401 on first 5, then 429 on 6th
 ```
 
 ### Success
-✅ First 5 return 200/401 (normal)
-✅ 6th returns 429 (rate limited)
+✅ First 5 requests: 200 or 401 (normal)
+✅ 6th request: 429 (rate limited)
 
 ---
 
-## Test 5: Check Encryption
+## Test 6: Check Encryption
 
-### Steps
+## Test 6: Check Encryption
+
+### Verify backups are encrypted
+
 ```bash
-# Backup files should be .enc (encrypted)
-docker exec ldapguard-api ls -la /backups/
+# List backup files
+docker exec ldapguard-staging-api ls -la /backups/
 
-# Verify raw file is binary (not readable LDIF)
-docker exec ldapguard-api file /backups/backup_*.enc
-# Should show: "data" (binary)
+# File should be .enc (encrypted)
+# Attempt to read raw file (should be gibberish)
+docker exec ldapguard-staging-api file /backups/backup_*.enc
+# Expected: "data" (binary, not LDIF)
 
-# Verify restore still works (decryption working)
-# Run Test 3 above - should succeed
+# Verify restore still works (decryption works)
+# Re-run Test 4 above
 ```
 
 ### Success
-✅ Backup files are `.enc` (encrypted)
-✅ File content is binary/gibberish
-✅ Restore decrypts successfully
+✅ Backup files are .enc
+✅ Raw file is binary/unreadable
+✅ Restore successfully decrypts
+
+---
+
+## Production: Add Real LDAP Servers
+
+### Connect Production to Real LDAP
+
+1. SSH to production VM
+2. Access web UI: http://prod-vm
+3. Add your real LDAP servers:
+   - **Name**: Corporate LDAP
+   - **Host**: your-corporate-ldap.com
+   - **Port**: 389 or 636 (TLS)
+   - **Bind DN**: cn=admin,dc=company,dc=com
+   - **Bind Password**: ***
+   - **Base DN**: dc=company,dc=com
+
+### Test with Real Data
+
+Once connected, all tests (1-6 above) work identically:
+- Backups of real LDAP data
+- Restores to real LDAP servers
+- Encryption of real data
+- Rate limiting active
+- All security features working
+
+---
+
+## Quick Setup Reference
+
+### Staging VM
+```bash
+# Deploy
+git checkout dev
+docker-compose -f docker-compose.staging.yml up -d
+
+# Access
+API: http://staging-vm:8001
+Web: http://staging-vm:8081
+Mock LDAP: localhost:389
+```
+
+### Production VM
+```bash
+# Deploy
+git checkout main
+docker-compose up -d
+
+# Access
+API: http://prod-vm:8000
+Web: http://prod-vm:80
+```
 
 ---
 
@@ -164,18 +285,20 @@ Web: http://prod-vm:80
 ### Staging containers won't start?
 ```bash
 docker-compose -f docker-compose.staging.yml logs api
+docker-compose -f docker-compose.staging.yml logs openldap
 ```
 
-### Can't connect to API?
+### Can't connect to LDAP?
 ```bash
+# Check LDAP container
 docker-compose -f docker-compose.staging.yml ps
-# Make sure containers are "Up"
+docker exec ldapguard-staging-ldap ldapwhoami -H ldap://localhost -D cn=admin,dc=test,dc=local -w admin
 ```
 
 ### Restore fails?
 ```bash
 # Check database for errors
-docker exec ldapguard-db psql -U postgres -d ldapguard_staging -c \
+docker exec ldapguard-staging-db psql -U ldapguard -d ldapguard_staging -c \
   "SELECT * FROM restores ORDER BY created_at DESC LIMIT 1;"
 ```
 
@@ -187,9 +310,22 @@ LOGIN_RATE_LIMIT = "5/minute"  # Change this number
 
 ---
 
+## Test Data Available in Staging
+
+**Mock LDAP Users** (8 test users):
+- alice, bob, charlie (Engineering)
+- diana, eve (Finance)
+- frank, grace (HR)
+- testadmin (Admin account)
+
+**Base DN**: dc=test,dc=local
+**Admin**: cn=admin,dc=test,dc=local / password: admin
+
+---
+
 ## Done = Ready for Production
 
-Once all 6 tests pass:
+Once all 6 tests pass on staging:
 ✅ Staging works
 ✅ Production works
 ✅ Backups created

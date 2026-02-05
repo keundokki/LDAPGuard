@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  openldap:
+    image: osixia/openldap:latest
+    container_name: ldapguard-staging-ldap
+    environment:
+      LDAP_ORGANISATION: "Test Company"
+      LDAP_DOMAIN: "test.local"
+      LDAP_BASE_DN: "dc=test,dc=local"
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_CONFIG_PASSWORD: config
+    volumes:
+      - ldap-staging-data:/var/lib/ldap
+      - ldap-staging-config:/etc/ldap/slapd.d
+      - ./scripts/ldap-test-data.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/test-data.ldif
+    ports:
+      - "389:389"    # Standard LDAP port
+      - "636:636"    # LDAP with TLS
+    networks:
+      - ldapguard-staging
+    healthcheck:
+      test: ["CMD", "ldapwhoami", "-H", "ldap://localhost", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   postgres:
     image: postgres:15
     container_name: ldapguard-staging-db
@@ -135,3 +160,5 @@ volumes:
   postgres-staging-data:
   redis-staging-data:
   staging-backups:
+  ldap-staging-data:
+  ldap-staging-config:

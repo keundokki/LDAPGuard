@@ -93,9 +93,20 @@ cp .env.example .env.staging
 # Edit .env.staging with staging values
 nano .env.staging
 
-# Start
-docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
+# Start (includes mock OpenLDAP with test data)
+docker-compose -f docker-compose.staging.yml up -d
+
+# Verify all containers
+docker-compose -f docker-compose.staging.yml ps
 ```
+
+**What's included in Staging**:
+- PostgreSQL
+- Redis
+- API
+- Worker
+- Web UI
+- **Mock OpenLDAP** with 8 test users (alice, bob, charlie, diana, eve, frank, grace, testadmin)
 
 ### 4. Deploy Production
 
@@ -109,9 +120,21 @@ cp .env.example .env
 # Edit .env with production values
 nano .env
 
-# Start
+# Start (no mock LDAP - add real servers via web UI)
 docker-compose up -d
+
+# Verify all containers
+docker-compose ps
 ```
+
+**What's included in Production**:
+- PostgreSQL
+- Redis
+- API
+- Worker
+- Web UI
+- Nginx reverse proxy
+- ⚠️ **No LDAP included** - add your real LDAP servers via the web UI
 
 ---
 
