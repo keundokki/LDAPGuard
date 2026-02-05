@@ -2,32 +2,72 @@
 
 # Pre-push hook: run tests before pushing
 # Skip with: SKIP_TESTS=1 git push
+# Disable with: git config hooks.disablePushHook true
 
 set -e
+
+# Allow disabling via git config
+if git config --bool hooks.disablePushHook >/dev/null 2>&1; then
+  if [ "$(git config --bool hooks.disablePushHook)" = "true" ]; then
+    echo "⏭️  Pre-push hook disabled"
+    exit 0
+  fi
+fi
 
 if [ "$SKIP_TESTS" = "1" ]; then
   echo "⏭️  Skipping tests (SKIP_TESTS=1)"
   exit 0
 fi
 
-echo "🧪 Running tests before push..."
-
-if [ -d "tests" ]; then
-  pytest tests/ -v --cov=api --cov=workers --cov-report=term
-else
-  echo "⚠️  No tests/ directory found. Skipping pytest."
+# Check if we're in a development environment
+IS_DEV=false
+if [ -f ".env" ] || [ -f ".env.local" ]; then
+  IS_DEV=true
 fi
 
-if command -v flake8 >/dev/null 2>&1; then
-  flake8 api workers --max-line-length=88 --statistics || true
+echo "🧪 Running pre-push checks..."
+
+# Only run tests if pytest is available AND we have a tests directory
+if [ -d "tests" ] && command -v pytest >/dev/null 2>&1; then
+  echo "Running pytest..."
+  pytest tests/ -v --cov=api --cov=workers --cov-report=term || {
+    echo "❌ Tests failed. Push blocked."
+    echo "   Use 'SKIP_TESTS=1 git push' to skip, or fix the tests."
+    exit 1
+  }
 else
-  echo "⚠️  flake8 not installed. Skipping lint."
+  if [ -d "tests" ]; then
+    echo "⚠️  pytest not installed. Skipping tests."
+    echo "   Install with: pip install -r requirements.txt"
+  else
+    echo "⚠️  No tests/ directory found."
+  fi
+fi
+
+# Run linters with warnings only (don't block)
+LINTER_WARNINGS=0
+
+if command -v flake8 >/dev/null 2>&1; then
+  echo "Checking code style with flake8..."
+  flake8 api workers --max-line-length=88 --statistics || LINTER_WARNINGS=$((LINTER_WARNINGS + 1))
+else
+  echo "⚠️  flake8 not installed"
 fi
 
 if command -v black >/dev/null 2>&1; then
-  black --check api workers || true
+  echo "Checking code formatting with black..."
+  black --check api workers 2>/dev/null || {
+    echo "⚠️  Code not formatted. Run: black api workers"
+    LINTER_WARNINGS=$((LINTER_WARNINGS + 1))
+  }
 else
-  echo "⚠️  black not installed. Skipping format check."
+  echo "⚠️  black not installed"
 fi
 
-echo "✅ Pre-push checks complete."
+if [ $LINTER_WARNINGS -gt 0 ]; then
+  echo ""
+  echo "⚠️  Linter warnings detected (non-blocking)"
+  echo "   Run: black api workers && flake8 api workers"
+fi
+
+echo "✅ Pre-push checks complete. Proceeding with push."
