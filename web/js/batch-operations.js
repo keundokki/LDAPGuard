@@ -57,8 +57,12 @@ async function batchDeleteBackups() {
         // Uncheck select all
         document.getElementById('select-all-backups').checked = false;
         
-        // Reload backups
-        await loadBackups();
+        // Reload backups if function is available
+        if (typeof loadBackups === 'function') {
+            await loadBackups();
+        } else {
+            console.warn('loadBackups function is not available; skipping backups reload.');
+        }
     } catch (error) {
         console.error('Batch delete error:', error);
         showToast('error', error.message || 'Failed to delete backups');
