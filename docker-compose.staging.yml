@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: ldapguard-staging-db
+    environment:
+      POSTGRES_USER: ldapguard
+      POSTGRES_PASSWORD: ldapguard_staging_pass
+      POSTGRES_DB: ldapguard_staging
+    volumes:
+      - postgres-staging-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts with dev
+    networks:
+      - ldapguard-staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ldapguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ldapguard-staging-redis
+    volumes:
+      - redis-staging-data:/data
+    ports:
+      - "6380:6379"  # Different port to avoid conflicts
+    networks:
+      - ldapguard-staging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ldapguard-staging-api
+    environment:
+      # Application
+      SECRET_KEY: ${SECRET_KEY:-staging_secret_key_change_in_production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-staging_encryption_key_base64==}
+      ENVIRONMENT: staging
+      
+      # Database
+      DATABASE_URL: postgresql+asyncpg://ldapguard:ldapguard_staging_pass@postgres:5432/ldapguard_staging
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # API Settings
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8081}
+      
+      # Security
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 30
+      
+      # Logging
+      LOG_LEVEL: INFO
+      
+    volumes:
+      - staging-backups:/app/backups
+    ports:
+      - "8001:8000"  # Different port for staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ldapguard-staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: ldapguard-staging-worker
+    environment:
+      # Application
+      SECRET_KEY: ${SECRET_KEY:-staging_secret_key_change_in_production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-staging_encryption_key_base64==}
+      ENVIRONMENT: staging
+      
+      # Database
+      DATABASE_URL: postgresql+asyncpg://ldapguard:ldapguard_staging_pass@postgres:5432/ldapguard_staging
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # Logging
+      LOG_LEVEL: INFO
+      
+    volumes:
+      - staging-backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ldapguard-staging
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: ldapguard-staging-web
+    ports:
+      - "8081:80"  # Different port for staging
+    depends_on:
+      - api
+    networks:
+      - ldapguard-staging
+    restart: unless-stopped
+
+networks:
+  ldapguard-staging:
+    driver: bridge
+
+volumes:
+  postgres-staging-data:
+  redis-staging-data:
+  staging-backups:
