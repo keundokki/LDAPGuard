@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Pre-push hook: run tests before pushing
+# Skip with: SKIP_TESTS=1 git push
+
+set -e
+
+if [ "$SKIP_TESTS" = "1" ]; then
+  echo "⏭️  Skipping tests (SKIP_TESTS=1)"
+  exit 0
+fi
+
+echo "🧪 Running tests before push..."
+
+if [ -d "tests" ]; then
+  pytest tests/ -v --cov=api --cov=workers --cov-report=term
+else
+  echo "⚠️  No tests/ directory found. Skipping pytest."
+fi
+
+if command -v flake8 >/dev/null 2>&1; then
+  flake8 api workers --max-line-length=88 --statistics || true
+else
+  echo "⚠️  flake8 not installed. Skipping lint."
+fi
+
+if command -v black >/dev/null 2>&1; then
+  black --check api workers || true
+else
+  echo "⚠️  black not installed. Skipping format check."
+fi
+
+echo "✅ Pre-push checks complete."
