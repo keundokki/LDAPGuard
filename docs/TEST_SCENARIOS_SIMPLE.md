@@ -3,7 +3,7 @@
 ## Environment Setup
 
 **Staging**: Mock OpenLDAP + LDAPGuard (dev/testing)
-**Production**: LDAPGuard only (add real LDAP servers via UI)
+**Production**: LDAPGuard connects to OpenLDAP on a separate VM
 
 ---
 
@@ -38,7 +38,7 @@ API: http://staging-vm:8001
 
 ```bash
 # From inside staging network
-docker exec ldapguard-staging-ldap ldapwhoami \
+docker exec ldapguard-ldap ldapwhoami \
   -H ldap://localhost \
   -D cn=admin,dc=test,dc=local \
   -w admin
@@ -50,8 +50,6 @@ docker exec ldapguard-staging-ldap ldapwhoami \
 ✅ Connection successful from LDAPGuard
 
 ---
-
-## Test 2: Manual Backup
 
 ## Test 2: Manual Backup
 
@@ -99,8 +97,6 @@ curl http://staging-vm:8001/api/ldap-servers/1/users \
 ✅ All 8 test users visible
 
 ---
-
-## Test 4: Restore Backup
 
 ## Test 4: Restore Backup
 
@@ -155,8 +151,6 @@ done
 
 ## Test 6: Check Encryption
 
-## Test 6: Check Encryption
-
 ### Verify backups are encrypted
 
 ```bash
@@ -179,26 +173,29 @@ docker exec ldapguard-staging-api file /backups/backup_*.enc
 
 ---
 
-## Production: Add Real LDAP Servers
+## Production: Connect to External OpenLDAP (VM3)
 
-### Connect Production to Real LDAP
+### Add Production LDAP Server via Web UI
 
 1. SSH to production VM
 2. Access web UI: http://prod-vm
-3. Add your real LDAP servers:
-   - **Name**: Corporate LDAP
-   - **Host**: your-corporate-ldap.com
-   - **Port**: 389 or 636 (TLS)
-   - **Bind DN**: cn=admin,dc=company,dc=com
-   - **Bind Password**: ***
-   - **Base DN**: dc=company,dc=com
+3. Add LDAP server:
+  - **Name**: Production LDAP
+  - **Host**: production-ldap-vm (VM3 hostname or IP)
+  - **Port**: 389
+  - **Bind DN**: cn=admin,dc=production,dc=local
+  - **Bind Password**: (your OpenLDAP admin password)
+  - **Base DN**: dc=production,dc=local
 
-### Test with Real Data
+4. Click "Test Connection"
+  - Should succeed ✅
+
+### Test with Production Data
 
 Once connected, all tests (1-6 above) work identically:
-- Backups of real LDAP data
-- Restores to real LDAP servers
-- Encryption of real data
+- Backups of production LDAP data
+- Restores to production LDAP servers
+- Encryption of production data
 - Rate limiting active
 - All security features working
 
@@ -232,11 +229,12 @@ docker-compose up -d
 # Access
 API: http://prod-vm:8000
 Web: http://prod-vm:80
+Production LDAP: production-ldap-vm:389 (external VM)
 ```
 
 ---
 
-## Test 6: Production Environment
+## Production Environment Validation
 
 ### Steps
 ```bash
@@ -260,31 +258,6 @@ curl http://prod-vm:8000/api/backups -H "Authorization: Bearer $TOKEN"
 
 ## Quick Setup Reference
 
-### Staging VM
-```bash
-# Deploy
-git checkout dev
-docker-compose -f docker-compose.staging.yml up -d
-
-# Access
-API: http://staging-vm:8001
-Web: http://staging-vm:8081
-DB: localhost:5433
-```
-
-### Production VM
-```bash
-# Deploy
-git checkout main
-docker-compose up -d
-
-# Access
-API: http://prod-vm:8000
-Web: http://prod-vm:80
-```
-
----
-
 ## If Something Fails
 
 ### Staging containers won't start?
@@ -292,11 +265,17 @@ Web: http://prod-vm:80
 docker-compose -f docker-compose.staging.yml logs api
 ```
 
-### Can't connect to LDAP?
+### Can't connect to LDAP (Staging)?
 ```bash
 # Check LDAP container
 docker-compose -f docker-compose.ldap.yml ps
 docker exec ldapguard-ldap ldapwhoami -H ldap://localhost -D cn=admin,dc=test,dc=local -w admin
+```
+
+### Can't connect to LDAP (Production)?
+```bash
+# Verify OpenLDAP on VM3
+ldapwhoami -H ldap://production-ldap-vm -D cn=admin,dc=production,dc=local -W
 ```
 
 ### Restore fails?

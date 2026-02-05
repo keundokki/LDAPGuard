@@ -1,4 +1,4 @@
-# Virtualization Setup for LDAPGuard - Staging + Production
+# Virtualization Setup for LDAPGuard - 3 VM Architecture
 
 ## Your Infrastructure
 
@@ -6,42 +6,39 @@
 
 ---
 
-## Simple VM Layout
-
-Just 2 VMs - Staging and Production:
+## VM Layout (3 Separate VMs)
 
 ```
 Physical Host (24 CPU, 64GB RAM, 1TB storage)
 │
-├── VM1: Staging (4 CPU, 8GB RAM, 50GB storage)
-│   ├── PostgreSQL (ldapguard_staging)
+├── VM1: Staging LDAPGuard (4 CPU, 8GB RAM, 50GB storage)
+│   ├── PostgreSQL (staging)
 │   ├── Redis
-│   ├── API (port 8001)
-│   ├── Worker
-│   └── Web UI (port 8081)
+│   ├── API + Worker + Web UI
+│   └── Mock OpenLDAP (Docker)
 │
-└── VM2: Production (6 CPU, 16GB RAM, 150GB storage)
-    ├── PostgreSQL (ldapguard + backups)
-    ├── Redis
-    ├── API (port 8000)
-    ├── Worker
-    ├── Web UI
-    └── Nginx reverse proxy
+├── VM2: Production LDAPGuard (6 CPU, 16GB RAM, 150GB storage)
+│   ├── PostgreSQL (production)
+│   ├── Redis
+│   ├── API + Worker + Web UI
+│   └── Nginx reverse proxy
+│
+└── VM3: Production LDAP (2 CPU, 4GB RAM, 20GB storage)
+    └── OpenLDAP installed directly on the VM (no containers)
 ```
 
 **Resource Allocation**:
-- CPU: 10 of 24 cores (42%)
-- RAM: 24GB of 64GB (37.5%)
-- Storage: 200GB of 1TB (20%)
-- Remaining: Headroom for host, snapshots
+- CPU: 12 of 24 cores (50%)
+- RAM: 28GB of 64GB (44%)
+- Storage: 220GB of 1TB (22%)
 
 ---
 
-## Quick Start
+## Setup Steps
 
 ### 1. Create VMs
 
-**VM1: Staging**
+**VM1: Staging** (4 CPU, 8GB RAM, 50GB)
 ```bash
 virt-install --name ldapguard-staging \
   --memory 8192 --vcpus 4 \
@@ -51,7 +48,7 @@ virt-install --name ldapguard-staging \
   --graphics none --serial pty --console pty
 ```
 
-**VM2: Production**
+**VM2: Production** (6 CPU, 16GB RAM, 150GB)
 ```bash
 virt-install --name ldapguard-prod \
   --memory 16384 --vcpus 6 \
@@ -61,13 +58,23 @@ virt-install --name ldapguard-prod \
   --graphics none --serial pty --console pty
 ```
 
-### 2. Install on Each VM
+**VM3: LDAP** (2 CPU, 4GB RAM, 20GB)
+```bash
+virt-install --name ldapguard-ldap \
+  --memory 4096 --vcpus 2 \
+  --disk size=20 \
+  --os-variant ubuntu22.04 \
+  --network bridge=br0 \
+  --graphics none --serial pty --console pty
+```
+
+### 2. Install LDAPGuard (VM1 + VM2)
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Docker/Podman
+# Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 
@@ -81,137 +88,175 @@ sudo chown -R $USER:$USER LDAPGuard
 cd LDAPGuard
 ```
 
-### 3. Deploy Staging (with Mock LDAP)
+### 3. Deploy Staging (VM1)
 
 ```bash
-# Start LDAP first (separate service)
-docker-compose -f docker-compose.ldap.yml up -d
-
-# Then start staging LDAPGuard
 git checkout dev
 git pull origin dev
 
+# Start mock LDAP first
+docker-compose -f docker-compose.ldap.yml up -d
+
+# Copy staging config
 cp .env.example .env.staging
 nano .env.staging
 
+# Start staging LDAPGuard
 docker-compose -f docker-compose.staging.yml up -d
 
-# Verify all containers
+# Verify
 docker-compose -f docker-compose.ldap.yml ps
 docker-compose -f docker-compose.staging.yml ps
 ```
 
-**What's included in Staging**:
-- PostgreSQL (separate compose)
-- Redis (separate compose)
-- API, Worker, Web UI (separate compose)
-- **Mock OpenLDAP** (separate compose) with 8 test users
+### 4. Install OpenLDAP on VM3 (Production LDAP)
 
-All services communicate on shared `ldapguard` network.
+```bash
+sudo apt update && sudo apt install -y slapd ldap-utils
 
-### 4. Deploy Production
+# Reconfigure (optional)
+sudo dpkg-reconfigure slapd
+
+# Verify
+ldapwhoami -H ldap://localhost -D cn=admin,dc=production,dc=local -W
+```
+
+### 5. Deploy Production LDAPGuard (VM2)
 
 ```bash
 git checkout main
 git pull origin main
 
-# Copy config
 cp .env.example .env
-
-# Edit .env with production values
 nano .env
 
-# Start (no mock LDAP - add real servers via web UI)
-docker-compose up -d
+# Point LDAPGuard to VM3 IP (example: LDAP_HOST=192.168.x.50)
 
-# Verify all containers
+docker-compose up -d
 docker-compose ps
 ```
 
-**What's included in Production**:
-- PostgreSQL
-- Redis
-- API
-- Worker
-- Web UI
-- Nginx reverse proxy
-- ⚠️ **No LDAP included** - add your real LDAP servers via the web UI
-
 ---
 
-## Network Setup
+## Configuration
 
-**Staging**: VM accessible on port 8001 (API) and 8081 (Web)
-**Production**: VM accessible on port 8000 (API) internally, 80/443 via Nginx
-
+### Staging `.env.staging`
 ```
-Host Network
-├── Staging VM: 192.168.x.100:8001 (API)
-│                192.168.x.100:8081 (Web UI)
-│
-└── Production VM: 192.168.x.101:8000 (internal)
-                   192.168.x.101:80/443 (Nginx external)
-```
-
----
-
-## Testing
-
-### Add Test LDAP Servers in LDAPGuard UI
-
-You can add dummy LDAP servers for testing:
-
-**Via Web UI (http://staging-vm:8081)**:
-1. Login as admin
-2. Go to LDAP Servers
-3. Add server:
-   - Name: "Test LDAP 1"
-   - Host: "ldap.test.local" (or any host)
-   - Port: 389
-   - Bind DN/Password: (test credentials)
-4. Click "Test Connection" to verify
-
-### Create Manual Backups
-
-```bash
-# Create backup
-curl -X POST http://staging-vm:8001/api/backups \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"ldap_server_id": 1}'
+SECRET_KEY=staging-secret
+ENCRYPTION_KEY=staging-key-base64==
+LDAP_HOST=openldap
+LDAP_PORT=389
+LDAP_BIND_DN=cn=admin,dc=test,dc=local
+LDAP_PASSWORD=admin
+POSTGRES_PASSWORD=staging-pass
 ```
 
-### Test Restore
-
-```bash
-# List backups
-curl http://staging-vm:8001/api/backups \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# Initiate restore
-curl -X POST http://staging-vm:8001/api/restores \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"backup_id": 1}'
+### Production `.env`
+```
+SECRET_KEY=prod-secret-key
+ENCRYPTION_KEY=prod-key-base64==
+LDAP_HOST=192.168.x.50      # VM3 IP address
+LDAP_PORT=389
+LDAP_BIND_DN=cn=admin,dc=production,dc=local
+LDAP_PASSWORD=prod-admin-password
+POSTGRES_PASSWORD=prod-pass
 ```
 
 ---
 
-## What You Get
+## Access Points
 
-✅ Staging environment for development & testing
-✅ Production-like environment for validation
-✅ Both running v0.0.5 with security hardening
-✅ Automatic deployments from dev → staging
-✅ Manual deployment control for production
-✅ All encryption, rate limiting, and security features
+| Component | URL | VM |
+|---|---|---|
+| Staging Web UI | http://staging-vm:8081 | VM1 |
+| Staging API | http://staging-vm:8001 | VM1 |
+| Staging LDAP | openldap:389 (internal) | VM1 |
+| Production Web UI | http://prod-vm | VM2 |
+| Production API | http://prod-vm:8000 | VM2 |
+| Production LDAP | prod-ldap-vm:389 | VM3 |
 
 ---
 
 ## Next Steps
 
-1. Create VMs in KVM
-2. Deploy Staging
-3. Deploy Production
-4. Test via web UI and API
-5. Ready for real LDAP servers when available
+1. Create 3 VMs with specified resources
+2. Deploy Staging (VM1) with mock LDAP
+3. Install OpenLDAP on VM3
+4. Deploy Production LDAPGuard (VM2) pointing to VM3
+5. Run tests: See [TEST_SCENARIOS_SIMPLE.md](TEST_SCENARIOS_SIMPLE.md)
+# Virtualization Setup for LDAPGuard - 3 VM Architecture
+
+## Your Infrastructure
+
+**Hardware**: 24 cores, 64GB RAM, 1TB storage (KVM)
+
+---
+
+## VM Layout (3 Separate VMs)
+
+```
+Physical Host (24 CPU, 64GB RAM, 1TB storage)
+│
+├── VM1: Staging LDAPGuard (4 CPU, 8GB RAM, 50GB storage)
+│   ├── PostgreSQL (staging)
+│   ├── Redis
+│   ├── API + Worker + Web UI
+│   └── Mock OpenLDAP (included)
+│
+├── VM2: Production LDAPGuard (6 CPU, 16GB RAM, 150GB storage)
+│   ├── PostgreSQL (production)
+│   ├── Redis
+│   ├── API + Worker + Web UI
+│   └── Nginx reverse proxy
+│
+└── VM3: Production LDAP (2 CPU, 4GB RAM, 20GB storage)
+    └── OpenLDAP (real data, separate)
+```
+
+**Resource Allocation**:
+- CPU: 12 of 24 cores (50%)
+- RAM: 28GB of 64GB (44%)
+- Storage: 220GB of 1TB (22%)
+- Remaining: Headroom for host, snapshots, expansion
+
+---
+
+## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set## Set l## Set## Set## Set## Set## Set## Set## Set## Set## Sisk si## Set## Set## Set## t u## Set## Set## Set## Set## Set## Set## Set## Set## none --## Set## Set## Set## Set## S
+
+**VM2**VM2**VM2**VM2**VM2**VM2**VM2**VM2**VM2**VMas*
+virt-install --name ldapguard-prod \
+  --memory 16384 --vcpus 6 \
+  --disk size=150 \
+  --os-variant ub  --os-variant ub  -or  --os-variant ub  --os-variant ub  er  --os-variant ub  --os-variant ub  -or*    C  --os-variant ub  --os-variant ub  -or  --os-variant ub  --os-vari-m  --os-variant ub  --os-variisk size=20   --os-variant ub  -nt  --os-variant ub  --os-variant ub  --graphics none --serial pty --console pty  --os-variant ub  --os-variant ub  -or  --os-variant ub  --o   --os-variant ub  --os-variant ub  -or  --l Docke  --os-variant ub  //get.  --os-variant ub  --os-vah
+  --os-variant ub  --os- I  --os-variant ub  --os- I  pt  --os-variant ub  --os- I  --os-variant ub  --os- do   t c  --os-variant ub  --os- I  --os-variPGuard.git
+sudo chown -R $USER:$USER LDAPGuard
+cd LDAPGuard
+```
+
+### 3. Deploy Staging (VM1)
+
+```bash
+git checkout dev
+git pull origin dev
+
+# Start mock LDAP first
+docker-compose -f docker-compose.ldap.yml up -d
+
+# Copy staging config
+cpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcf cpcpcpcpcpcpcpcpcpcpcpcpcp upcpcpcpcpcpcpcpcpcprucpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcf cpcpcpcpcpcpcpcpcpcpcpcpcp upcpcpcpcpcpcpcpcpcprucpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcf cpcpcpcpcpcpcpcpcpcpcpcpcp upcpcpcpcpcpcpcpcpcprucpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcf cpcpcpcpcpcpcpcpcpcpcpcpcp upcpcpcpcpcpcpcpcpcprucpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcponcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcrtcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcf cpcpcpcpcpcpcpcpcpcpcpcpcp upcpcpcpcpcpcpcpcpcprucpcpcpcpcpcpcpcpcpcpomcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcpcp
+
+
+pcpcpcpcpc `.env.pcpcpcp`
+```
+SECRET_KEY=stagiSECRETreSECRET_KEY=stagY=SECRET_KEY=stagiSE==
+SECRET_KEY=stagiSECRET      # Local docker hostname
+LDAP_PORT=389
+LDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BILDAP_BstLDAP_BILDAP_BILDAP_BIdge=LDAP_BILDAP_BILDAP_BILDAhes LDAP via local docker network
+- Production → reaches LDAP via - Production → reaches LDAP via - Production →--- ProductioSteps
+
+1. Create 3 VMs with specified resources
+2. Deploy Staging (VM1) with mock LDAP
+3. Deploy Production LDAP (VM3)
+4. Deploy Production LDAPGuard (VM2) pointing to VM3
+5. Run tests: See [TEST_SCENARIOS_SIMPLE.md](TEST_SCENARIOS_SIMPLE.md)
+

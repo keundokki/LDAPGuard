@@ -20,8 +20,7 @@ Your Host (24 CPU, 64GB RAM, 1TB storage)
 │       └── Nginx reverse proxy
 │
 └── VM3: Production LDAP (2 CPU, 4GB RAM, 20GB storage)
-    └── docker-compose.ldap.prod.yml
-        └── OpenLDAP (real production data)
+  └── OpenLDAP installed directly on the VM (no containers)
 ```
 
 ---
@@ -114,23 +113,16 @@ docker-compose -f docker-compose.ldap.yml ps
 docker-compose -f docker-compose.staging.yml ps
 ```
 
-### 4. Deploy Production LDAP (VM3)
+### 4. Install OpenLDAP on VM3 (Production LDAP)
 
 ```bash
-git checkout main
-git pull origin main
+sudo apt update && sudo apt install -y slapd ldap-utils
 
-# Copy LDAP config
-cp .env.example .env.ldap
-
-# Edit with production LDAP settings
-nano .env.ldap
-
-# Start LDAP
-docker-compose -f docker-compose.ldap.prod.yml up -d
+# Reconfigure (optional)
+sudo dpkg-reconfigure slapd
 
 # Verify
-docker-compose -f docker-compose.ldap.prod.yml ps
+ldapwhoami -H ldap://localhost -D cn=admin,dc=production,dc=local -W
 ```
 
 ### 5. Deploy Production LDAPGuard (VM2)
@@ -200,12 +192,6 @@ LDAP_BIND_DN=cn=admin,dc=test,dc=local
 LDAP_PASSWORD=admin
 POSTGRES_PASSWORD=staging-password
 ALLOWED_ORIGINS=http://localhost:8081
-```
-
-### Production LDAP `.env.ldap`
-```
-LDAP_ADMIN_PASSWORD=prod-admin-password
-LDAP_CONFIG_PASSWORD=prod-config-password
 ```
 
 ### Production `.env`
