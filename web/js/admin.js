@@ -354,7 +354,9 @@ async function importConfiguration(event) {
         
         // Reload data
         await loadServers();
-        await loadScheduledBackups();
+        if (typeof loadScheduledBackups === 'function') {
+            await loadScheduledBackups();
+        }
     } catch (error) {
         console.error('Import failed:', error);
         showToast('error', error.message || 'Failed to import configuration');
