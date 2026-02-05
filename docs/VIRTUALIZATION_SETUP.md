@@ -1,96 +1,247 @@
-# Virtualization Setup for LDAPGuard
+# Virtualization Setup for LDAPGuard - Production Test Scenario
 
-Since you have a virtualization-capable server, you can run multiple VMs efficiently.
+## Your Infrastructure
 
-## Questions About Your Server
-
-To optimize the configuration, I need to know:
-
-1. **Server Specs**
-   - Total CPU cores? (e.g., 16, 32, 64)
-   - Total RAM? (e.g., 32GB, 64GB, 128GB)
-   - Storage capacity? (e.g., 500GB, 2TB, 4TB)
-   - Storage type? (SSD, HDD, NVMe)
-
-2. **Virtualization Platform**
-   - Hypervisor? (KVM/QEMU, Hyper-V, ESXi, Proxmox, etc.)
-   - Host OS? (Ubuntu, Debian, Proxmox, etc.)
-
-3. **Network Setup**
-   - Dedicated IPs available?
-   - Static IP range?
-   - Internet bandwidth?
-
-4. **Usage**
-   - How many LDAP directories will you backup?
-   - How many users?
-   - Backup frequency? (hourly, daily, weekly)
-   - Expected data volume per backup?
+**Hardware**: 24 cores, 64GB RAM, 1TB storage (KVM)
 
 ---
 
-## Recommended VM Configuration
+## Recommended VM Layout
 
-Based on typical setups, here's what I'd suggest:
+### Test Environment Architecture
 
-### Option A: Single Server, 2 VMs
 ```
-Physical Server (e.g., 32 CPU, 64GB RAM)
-├── VM1: Staging (4 CPU, 8GB RAM, 30GB SSD)
+Physical Host (24 CPU, 64GB RAM, 1TB storage)
+│
+├── VM1: LDAP Test Servers (8 CPU, 16GB RAM, 100GB storage)
+│   ├── OpenLDAP-1 (Corporate AD sync)
+│   ├── OpenLDAP-2 (Finance AD sync)
+│   └── OpenLDAP-3 (HR AD sync)
+│
+├── VM2: Staging LDAPGuard (4 CPU, 8GB RAM, 50GB storage)
 │   ├── PostgreSQL (ldapguard_staging)
 │   ├── Redis
-│   ├── API
+│   ├── API (port 8001)
 │   ├── Worker
-│   └── Web UI
+│   └── Web UI (port 8081)
 │
-└── VM2: Production (8 CPU, 16GB RAM, 100GB SSD)
-    ├── PostgreSQL (ldapguard) + backups
+└── VM3: Production LDAPGuard (6 CPU, 16GB RAM, 150GB storage)
+    ├── PostgreSQL (ldapguard + backups)
     ├── Redis (with sentinel)
-    ├── API
+    ├── API (port 8000)
     ├── Worker
     ├── Web UI
     └── Nginx reverse proxy
 ```
 
-### Option B: Single Server, 3 VMs (High Availability)
-```
-Physical Server (e.g., 48 CPU, 128GB RAM)
-├── VM1: Staging (4 CPU, 8GB RAM, 30GB SSD)
-│
-├── VM2: Production Primary (8 CPU, 16GB RAM, 100GB SSD)
-│   ├── PostgreSQL (master)
-│   └── Redis
-│
-└── VM3: Production Backup (8 CPU, 16GB RAM, 100GB SSD)
-    ├── PostgreSQL (replica)
-    └── Redis (replica)
-```
+**Total Resource Allocation**:
+- CPU: 18 of 24 cores (75%)
+- RAM: 40GB of 64GB (62.5%)
+- Storage: 300GB of 1TB (30%)
+- Remaining: Headroom for snapshots, temp storage, host OS
 
 ---
 
-## Advantages of Your Setup
+## Use Case Scenario: Production Test
 
-✅ **Cost**: No monthly cloud bills (~$100-300 one-time for hardware)
-✅ **Control**: Full control over infrastructure
-✅ **Scalability**: Can add more VMs as needed
-✅ **Testing**: Can snapshot and rollback VMs for testing
-✅ **Compliance**: Data stays on-premises
-✅ **Performance**: Local network latency (sub-millisecond)
+### Scenario Overview
+
+**Organization**: Multi-department company with 3 LDAP directories
+- **Corporate LDAP**: 5,000 users, 2GB data
+- **Finance LDAP**: 1,500 users, 800MB data
+- **HR LDAP**: 1,000 users, 400MB data
+
+### Test Objectives
+
+1. ✅ Backup all 3 directories daily
+2. ✅ Test point-in-time recovery
+3. ✅ Validate selective restore
+4. ✅ Simulate disaster recovery
+5. ✅ Test backup retention policies
+6. ✅ Verify data encryption
 
 ---
 
-## Next Steps
+## VM 1: LDAP Test Servers (8 CPU, 16GB RAM, 100GB)
 
-Tell me:
-1. Server CPU/RAM/Storage specs
-2. Virtualization platform (KVM, Proxmox, ESXi, etc.)
-3. Expected workload (backup frequency, data size)
-4. Network setup (IPs available)
+### Setup Script
 
-Then I'll provide:
-- Exact VM sizing recommendations
-- Installation scripts for each VM
-- Network configuration
-- Automated backup setup
-- Monitoring configuration
-- Disaster recovery plan
+```bash
+#!/bin/bash
+# Create 3 test OpenLDAP servers
+
+# VM1-LDAP Base Configuration
+sudo apt update && sudo apt install -y slapd ldap-utils
+
+# Create test organizational structure for each directory
+# See: docs/TEST_LDAP_DATA.md for detailed LDIF files
+```
+
+### Test Data Structure
+
+**Corporate LDAP** (ou=corporate)
+- 5,000 users (cn=user0001 to cn=user5000)
+- 50 departments
+- 200 groups
+- 2GB total data
+
+**Finance LDAP** (ou=finance)
+- 1,500 users (cn=user0001 to cn=user1500)
+- 10 departments
+- 50 groups
+- 800MB total data
+
+**HR LDAP** (ou=hr)
+- 1,000 users (cn=user0001 to cn=user1000)
+- 5 departments
+- 20 groups
+- 400MB total data
+
+---
+
+## VM 2: Staging LDAPGuard (4 CPU, 8GB RAM, 50GB)
+
+### Purpose
+- Testing backup procedures
+- Validating restore operations
+- Performance testing
+- Integration testing with test LDAP servers
+
+### Setup
+
+```bash
+# Pull latest dev code
+git checkout dev
+git pull
+
+# Start staging environment
+podman-compose -f docker-compose.staging.yml up -d
+
+# Configure test LDAP connections
+# Create 3 LDAP server entries pointing to VM1
+```
+
+### Test Workflow
+
+1. **Daily Backups** (automated via scheduler)
+   - Corporate: 2GB backup
+   - Finance: 800MB backup
+   - HR: 400MB backup
+   - Total daily: ~3.2GB
+
+2. **Weekly Full Restore Test**
+   - Pick random directory
+   - Full restore to test environment
+   - Validate all entries restored correctly
+
+3. **Monthly Disaster Recovery Test**
+   - Simulate VM1 failure
+   - Restore all 3 directories
+   - Verify data integrity
+   - Time recovery process
+
+---
+
+## VM 3: Production LDAPGuard (6 CPU, 16GB RAM, 150GB)
+
+### Purpose
+- Production-like environment
+- Real deployment testing
+- Performance under load
+- Backup automation & retention
+
+### Setup
+
+```bash
+# Pull from main branch
+git checkout main
+git pull
+
+# Start production environment
+podman-compose up -d
+
+# Configure SSL/TLS with Let's Encrypt (optional for test)
+# Set backup retention: 30 days
+# Enable automated daily backups
+```
+
+### Test Scenarios
+
+1. **Incremental Backups**
+   - Day 1: Full backup (3.2GB)
+   - Days 2-7: Incremental (50-100MB each)
+   - Total week 1: ~4GB
+
+2. **Retention Policy Test**
+   - Create backups for 60 days
+   - Apply 30-day retention
+   - Verify old backups deleted
+   - Verify recent backups retained
+
+3. **Point-in-Time Recovery Test**
+   - Backup directory on Day 10
+   - Modify/delete 100 user entries
+   - Restore from Day 9 backup
+   - Verify users restored
+
+4. **Selective Restore Test**
+   - Restore only Finance department (ou=finance,ou=finance)
+   - Restore only specific 10 users
+   - Merge into existing LDAP
+
+5. **Encryption Test**
+   - Verify backups encrypted (AES-256)
+   - Attempt to read raw backup file (should be unreadable)
+   - Restore encrypted backup (should work)
+
+---
+
+## Test Schedule
+
+### Week 1: Setup & Baseline
+- [ ] Day 1: Deploy VMs
+- [ ] Day 2: Create test LDAP data
+- [ ] Day 3: First backups
+- [ ] Day 4-7: Monitor, verify automatic backups
+
+### Week 2-4: Functional Testing
+- [ ] Daily backups running (20-30 backups)
+- [ ] Weekly full restore tests
+- [ ] Selective restore tests
+- [ ] Performance monitoring
+
+### Week 5: Production Simulation
+- [ ] Disaster recovery drill
+- [ ] 30-day retention policy validation
+- [ ] Encryption verification
+- [ ] Load testing with multiple concurrent backups
+
+### Week 6: Sign-off
+- [ ] Document results
+- [ ] Finalize configuration
+- [ ] Create runbooks
+- [ ] Transition to production
+
+---
+
+## Test Success Criteria
+
+✅ All backups complete successfully
+✅ Recovery time < 5 minutes for 2GB backup
+✅ Selective restore works (single user, department, etc.)
+✅ Encrypted backups unreadable without decryption
+✅ Retention policies work correctly
+✅ 100% data integrity after restore
+✅ No data loss scenarios
+
+---
+
+## Next: Create Detailed Test Data
+
+I can create:
+1. **TEST_LDAP_DATA.md** - LDIF files for 3 test directories
+2. **TEST_SCENARIOS.md** - Step-by-step test procedures
+3. **BACKUP_AUTOMATION.md** - Cron jobs and scheduling
+4. **TEST_MONITORING.md** - Health checks and validation
+
+Want me to create these now?
