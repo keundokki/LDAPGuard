@@ -49,7 +49,6 @@ async def get_restore_job(restore_id: int, db: AsyncSession = Depends(get_db)):
 )
 async def create_restore_job(
     restore_data: RestoreJobCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
