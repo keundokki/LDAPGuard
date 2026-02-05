@@ -412,3 +412,205 @@ function getElementIdForSetting(key) {
     };
     return mapping[key];
 }
+
+// ============================================
+// User Management Functions
+// ============================================
+
+// Load users
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/auth/users/', {
+            headers: authHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load users');
+        }
+        
+        const users = await response.json();
+        const tbody = document.getElementById('users-tbody');
+        
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No users found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = users.map(user => `
+            <tr>
+                <td>${user.id}</td>
+                <td>${user.username}</td>
+                <td>${user.email}</td>
+                <td><span class="badge badge-${user.role}">${user.role}</span></td>
+                <td><span class="badge badge-${user.is_active ? 'success' : 'danger'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
+                <td>${new Date(user.created_at).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-primary btn-sm" onclick="showEditUserModal(${user.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showToast('error', 'Failed to load users');
+    }
+}
+
+// Show create user modal
+function showCreateUserModal() {
+    document.getElementById('createUserModal').style.display = 'block';
+}
+
+// Close create user modal
+function closeCreateUserModal() {
+    document.getElementById('createUserModal').style.display = 'none';
+    document.getElementById('createUserForm').reset();
+}
+
+// Handle create user
+async function handleCreateUser(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('newUsername').value;
+    const email = document.getElementById('newEmail').value;
+    const password = document.getElementById('newPassword').value;
+    const fullName = document.getElementById('newFullName').value;
+    const role = document.getElementById('newRole').value;
+    
+    try {
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username,
+                email,
+                password,
+                full_name: fullName || null,
+                role,
+                ldap_auth: false
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create user');
+        }
+        
+        showToast('success', 'User created successfully');
+        closeCreateUserModal();
+        await loadUsers();
+    } catch (error) {
+        console.error('Error creating user:', error);
+        showToast('error', error.message || 'Failed to create user');
+    }
+}
+
+// Show edit user modal
+async function showEditUserModal(userId) {
+    try {
+        // Fetch user details
+        const response = await fetch('/api/auth/users/', {
+            headers: authHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load user details');
+        }
+        
+        const users = await response.json();
+        const user = users.find(u => u.id === userId);
+        
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        // Populate form
+        document.getElementById('editUserId').value = user.id;
+        document.getElementById('editUsername').value = user.username;
+        document.getElementById('editEmail').value = user.email;
+        document.getElementById('editFullName').value = user.full_name || '';
+        document.getElementById('editRole').value = user.role;
+        document.getElementById('editIsActive').value = user.is_active.toString();
+        
+        // Show modal
+        document.getElementById('editUserModal').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading user details:', error);
+        showToast('error', error.message || 'Failed to load user details');
+    }
+}
+
+// Close edit user modal
+function closeEditUserModal() {
+    document.getElementById('editUserModal').style.display = 'none';
+    document.getElementById('editUserForm').reset();
+}
+
+// Handle edit user
+async function handleEditUser(event) {
+    event.preventDefault();
+    
+    const userId = document.getElementById('editUserId').value;
+    const email = document.getElementById('editEmail').value;
+    const fullName = document.getElementById('editFullName').value;
+    const role = document.getElementById('editRole').value;
+    const isActive = document.getElementById('editIsActive').value === 'true';
+    
+    try {
+        const response = await fetch(`/api/auth/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email,
+                full_name: fullName || null,
+                role,
+                is_active: isActive
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update user');
+        }
+        
+        showToast('success', 'User updated successfully');
+        closeEditUserModal();
+        await loadUsers();
+    } catch (error) {
+        console.error('Error updating user:', error);
+        showToast('error', error.message || 'Failed to update user');
+    }
+}
+
+// Delete user
+async function deleteUser(userId) {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/auth/users/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete user');
+        }
+        
+        showToast('success', 'User deleted successfully');
+        await loadUsers();
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        showToast('error', error.message || 'Failed to delete user');
+    }
+}
