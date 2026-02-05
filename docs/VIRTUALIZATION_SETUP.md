@@ -81,32 +81,33 @@ sudo chown -R $USER:$USER LDAPGuard
 cd LDAPGuard
 ```
 
-### 3. Deploy Staging
+### 3. Deploy Staging (with Mock LDAP)
 
 ```bash
+# Start LDAP first (separate service)
+docker-compose -f docker-compose.ldap.yml up -d
+
+# Then start staging LDAPGuard
 git checkout dev
 git pull origin dev
 
-# Copy config
 cp .env.example .env.staging
-
-# Edit .env.staging with staging values
 nano .env.staging
 
-# Start (includes mock OpenLDAP with test data)
 docker-compose -f docker-compose.staging.yml up -d
 
 # Verify all containers
+docker-compose -f docker-compose.ldap.yml ps
 docker-compose -f docker-compose.staging.yml ps
 ```
 
 **What's included in Staging**:
-- PostgreSQL
-- Redis
-- API
-- Worker
-- Web UI
-- **Mock OpenLDAP** with 8 test users (alice, bob, charlie, diana, eve, frank, grace, testadmin)
+- PostgreSQL (separate compose)
+- Redis (separate compose)
+- API, Worker, Web UI (separate compose)
+- **Mock OpenLDAP** (separate compose) with 8 test users
+
+All services communicate on shared `ldapguard` network.
 
 ### 4. Deploy Production
 

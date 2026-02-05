@@ -1,31 +1,6 @@
 version: '3.8'
 
 services:
-  openldap:
-    image: osixia/openldap:latest
-    container_name: ldapguard-staging-ldap
-    environment:
-      LDAP_ORGANISATION: "Test Company"
-      LDAP_DOMAIN: "test.local"
-      LDAP_BASE_DN: "dc=test,dc=local"
-      LDAP_ADMIN_PASSWORD: admin
-      LDAP_CONFIG_PASSWORD: config
-    volumes:
-      - ldap-staging-data:/var/lib/ldap
-      - ldap-staging-config:/etc/ldap/slapd.d
-      - ./scripts/ldap-test-data.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/test-data.ldif
-    ports:
-      - "389:389"    # Standard LDAP port
-      - "636:636"    # LDAP with TLS
-    networks:
-      - ldapguard-staging
-    healthcheck:
-      test: ["CMD", "ldapwhoami", "-H", "ldap://localhost", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   postgres:
     image: postgres:15
     container_name: ldapguard-staging-db
@@ -38,7 +13,7 @@ services:
     ports:
       - "5433:5432"  # Different port to avoid conflicts with dev
     networks:
-      - ldapguard-staging
+      - ldapguard
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ldapguard"]
       interval: 10s
@@ -53,7 +28,7 @@ services:
     ports:
       - "6380:6379"  # Different port to avoid conflicts
     networks:
-      - ldapguard-staging
+      - ldapguard
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -99,7 +74,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - ldapguard-staging
+      - ldapguard
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -136,7 +111,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - ldapguard-staging
+      - ldapguard
     restart: unless-stopped
 
   web:
@@ -149,16 +124,14 @@ services:
     depends_on:
       - api
     networks:
-      - ldapguard-staging
+      - ldapguard
     restart: unless-stopped
 
 networks:
-  ldapguard-staging:
+  ldapguard:
     driver: bridge
 
 volumes:
   postgres-staging-data:
   redis-staging-data:
   staging-backups:
-  ldap-staging-data:
-  ldap-staging-config:

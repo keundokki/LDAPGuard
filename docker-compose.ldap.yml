@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  openldap:
+    image: osixia/openldap:latest
+    container_name: ldapguard-ldap
+    environment:
+      LDAP_ORGANISATION: "Test Company"
+      LDAP_DOMAIN: "test.local"
+      LDAP_BASE_DN: "dc=test,dc=local"
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_CONFIG_PASSWORD: config
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+      - ./scripts/ldap-test-data.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/test-data.ldif
+    ports:
+      - "389:389"    # Standard LDAP port
+      - "636:636"    # LDAP with TLS
+    networks:
+      - ldapguard
+    healthcheck:
+      test: ["CMD", "ldapwhoami", "-H", "ldap://localhost", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  ldapguard:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:

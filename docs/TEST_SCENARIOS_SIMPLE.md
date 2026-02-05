@@ -206,6 +206,11 @@ Once connected, all tests (1-6 above) work identically:
 
 ## Quick Setup Reference
 
+### Start LDAP (once)
+```bash
+docker-compose -f docker-compose.ldap.yml up -d
+```
+
 ### Staging VM
 ```bash
 # Deploy
@@ -215,7 +220,7 @@ docker-compose -f docker-compose.staging.yml up -d
 # Access
 API: http://staging-vm:8001
 Web: http://staging-vm:8081
-Mock LDAP: localhost:389
+Mock LDAP: localhost:389 (internal hostname: openldap)
 ```
 
 ### Production VM
@@ -285,14 +290,13 @@ Web: http://prod-vm:80
 ### Staging containers won't start?
 ```bash
 docker-compose -f docker-compose.staging.yml logs api
-docker-compose -f docker-compose.staging.yml logs openldap
 ```
 
 ### Can't connect to LDAP?
 ```bash
 # Check LDAP container
-docker-compose -f docker-compose.staging.yml ps
-docker exec ldapguard-staging-ldap ldapwhoami -H ldap://localhost -D cn=admin,dc=test,dc=local -w admin
+docker-compose -f docker-compose.ldap.yml ps
+docker exec ldapguard-ldap ldapwhoami -H ldap://localhost -D cn=admin,dc=test,dc=local -w admin
 ```
 
 ### Restore fails?
