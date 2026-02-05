@@ -48,20 +48,24 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 async def validate_configuration():
     """Validate critical configuration on startup."""
     errors = []
-    
+
     # Check for default/insecure secrets
     if settings.SECRET_KEY == "your-secret-key-change-in-production":
-        errors.append("SECRET_KEY is using default value - must be changed in production")
-    
+        errors.append(
+            "SECRET_KEY is using default value - must be changed in production"
+        )
+
     if len(settings.SECRET_KEY) < 32:
         errors.append("SECRET_KEY must be at least 32 characters long")
-    
+
     if settings.ENCRYPTION_KEY == "your-encryption-key-32-bytes-min":
-        errors.append("ENCRYPTION_KEY is using default value - must be changed in production")
-    
+        errors.append(
+            "ENCRYPTION_KEY is using default value - must be changed in production"
+        )
+
     if len(settings.ENCRYPTION_KEY) < 32:
         errors.append("ENCRYPTION_KEY must be at least 32 bytes long")
-    
+
     if errors:
         logger.error("Configuration validation failed:")
         for error in errors:
@@ -72,10 +76,11 @@ async def validate_configuration():
         else:
             logger.warning("Running in DEBUG mode with insecure configuration")
 
+
 # CORS middleware
 if settings.CORS_ALLOWED_ORIGINS:
     # Use configured origins if provided
-    allowed_origins = settings.CORS_ALLOWED_ORIGINS.split(',')
+    allowed_origins = settings.CORS_ALLOWED_ORIGINS.split(",")
 elif settings.DEBUG:
     # Allow all in debug mode
     allowed_origins = ["*"]
@@ -139,7 +144,7 @@ async def startup_event():
     """Startup event handler."""
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    
+
     # Initialize Redis connection
     try:
         await get_redis_client()
@@ -152,6 +157,6 @@ async def startup_event():
 async def shutdown_event():
     """Shutdown event handler."""
     logger.info(f"Shutting down {settings.APP_NAME}")
-    
+
     # Close Redis connection
     await close_redis_client()

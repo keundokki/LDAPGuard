@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
-from api.core.security import create_access_token, get_current_user, get_password_hash, verify_password
+from api.core.security import (
+    create_access_token,
+    get_current_user,
+    get_password_hash,
+    verify_password,
+)
 from api.models.models import User
 from api.schemas.schemas import (
     LoginRequest,
@@ -26,7 +31,9 @@ limiter = Limiter(key_func=get_remote_address)
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
 @limiter.limit("3/hour")
-async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(
+    request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)
+):
     """Register a new user. Rate limited to 3 registrations per hour."""
     # Check if username exists
     result = await db.execute(select(User).where(User.username == user_data.username))
@@ -67,7 +74,9 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
 
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
-async def login(request: Request, login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    request: Request, login_data: LoginRequest, db: AsyncSession = Depends(get_db)
+):
     """Login and get access token. Rate limited to 5 attempts per minute."""
     # Get user
     result = await db.execute(select(User).where(User.username == login_data.username))
@@ -103,17 +112,16 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 @router.get("/users/", response_model=list[UserResponse])
 async def list_users(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """List all users (admin only)."""
     # Only admins can list users
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can list users"
+            detail="Only administrators can list users",
         )
-    
+
     result = await db.execute(select(User).order_by(User.created_at.desc()))
     users = result.scalars().all()
     return users
@@ -124,33 +132,32 @@ async def update_user(
     user_id: int,
     user_data: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Update a user (admin only)."""
     # Only admins can update users
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can update users"
+            detail="Only administrators can update users",
         )
-    
+
     # Get user to update
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    
+
     # Prevent admin from disabling themselves
     if user.id == current_user.id and user_data.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot disable your own account"
+            detail="Cannot disable your own account",
         )
-    
+
     # Update fields if provided
     if user_data.email is not None:
         # Check if email is already taken by another user
@@ -159,26 +166,25 @@ async def update_user(
         )
         if result.scalar_one_or_none():
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already in use"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use"
             )
         user.email = user_data.email
-    
+
     if user_data.full_name is not None:
         user.full_name = user_data.full_name
-    
+
     if user_data.role is not None:
         # Prevent admin from demoting themselves
         if user.id == current_user.id and user_data.role.value != "admin":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot change your own role"
+                detail="Cannot change your own role",
             )
         user.role = user_data.role
-    
+
     if user_data.is_active is not None:
         user.is_active = user_data.is_active
-    
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -188,33 +194,32 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a user (admin only)."""
     # Only admins can delete users
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can delete users"
+            detail="Only administrators can delete users",
         )
-    
+
     # Get user to delete
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    
+
     # Prevent admin from deleting themselves
     if user.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account"
+            detail="Cannot delete your own account",
         )
-    
+
     await db.delete(user)
     await db.commit()
     return None

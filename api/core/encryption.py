@@ -67,28 +67,30 @@ def get_encryption_service() -> AESEncryption:
     return AESEncryption(settings.ENCRYPTION_KEY)
 
 
-def decrypt_ldap_password(encrypted_password: Optional[str], is_encrypted: bool = False) -> Optional[str]:
+def decrypt_ldap_password(
+    encrypted_password: Optional[str], is_encrypted: bool = False
+) -> Optional[str]:
     """
     Helper to decrypt LDAP password if encrypted.
-    
+
     Args:
         encrypted_password: The password (encrypted or plain text)
         is_encrypted: Flag indicating if password is encrypted
-        
+
     Returns:
         Decrypted password string or None
     """
     if not encrypted_password:
         return None
-    
+
     if not is_encrypted:
         # Password is not encrypted, return as-is
         return encrypted_password
-    
+
     try:
         encryption = get_encryption_service()
         decrypted_bytes = encryption.decrypt(encrypted_password)
-        return decrypted_bytes.decode('utf-8')
+        return decrypted_bytes.decode("utf-8")
     except Exception as e:
         # Log decryption failure with context for debugging
         logger.error(f"Failed to decrypt LDAP password: {str(e)}")

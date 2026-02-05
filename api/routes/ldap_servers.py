@@ -86,17 +86,17 @@ async def create_ldap_server(
     if not ldap_service.test_connection():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to connect to LDAP server. Please check your credentials and connection settings.",
+            detail="Failed to connect to LDAP server. Check credentials and settings.",
         )
 
     # Encrypt bind password if provided
     server_dict = server_data.model_dump()
-    if server_dict.get('bind_password'):
-        encrypted_password = encryption.encrypt(server_dict['bind_password'].encode())
-        server_dict['bind_password'] = encrypted_password
-        server_dict['password_encrypted'] = True
+    if server_dict.get("bind_password"):
+        encrypted_password = encryption.encrypt(server_dict["bind_password"].encode())
+        server_dict["bind_password"] = encrypted_password
+        server_dict["password_encrypted"] = True
     else:
-        server_dict['password_encrypted'] = False
+        server_dict["password_encrypted"] = False
 
     new_server = LDAPServer(**server_dict)
     db.add(new_server)
@@ -124,13 +124,13 @@ async def update_ldap_server(
 
     # Update fields with encryption for password
     update_data = server_data.model_dump(exclude_unset=True)
-    
+
     # Encrypt password if provided
-    if 'bind_password' in update_data and update_data['bind_password']:
-        encrypted_password = encryption.encrypt(update_data['bind_password'].encode())
-        update_data['bind_password'] = encrypted_password
-        update_data['password_encrypted'] = True
-    
+    if "bind_password" in update_data and update_data["bind_password"]:
+        encrypted_password = encryption.encrypt(update_data["bind_password"].encode())
+        update_data["bind_password"] = encrypted_password
+        update_data["password_encrypted"] = True
+
     for field, value in update_data.items():
         setattr(server, field, value)
 
@@ -156,6 +156,7 @@ async def delete_ldap_server(server_id: int, db: AsyncSession = Depends(get_db))
 
     return None
 
+
 @router.post("/test")
 async def test_ldap_connection(
     test_data: LDAPTestConnection,
@@ -172,23 +173,19 @@ async def test_ldap_connection(
             bind_dn=test_data.bind_dn,
             bind_password=test_data.bind_password,
         )
-        
+
         # Try to connect and get basic info
-        entries = await ldap_service.search_entries(
-            search_filter="(objectClass=*)",
-            attributes=["dn"],
-            size_limit=1
-        )
-        
+        entries = ldap_service.search_all_entries(search_filter="(objectClass=*)")
+
         entry_count = len(entries) if entries else 0
-        
+
         return {
             "status": "success",
-            "message": f"Successfully connected to LDAP server. Found {entry_count} entries.",
+            "message": f"Successfully connected. Found {entry_count} entries.",
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Connection test failed: {str(e)}"
+            detail=f"Connection test failed: {str(e)}",
         )
