@@ -5,13 +5,18 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
+from api.core.encryption import AESEncryption
 from api.core.security import get_current_user
 from api.models.models import LDAPServer
 from api.schemas.schemas import LDAPServerCreate, LDAPServerResponse, LDAPServerUpdate
 from api.services.ldap_service import LDAPService
 
 router = APIRouter(prefix="/ldap-servers", tags=["LDAP Servers"])
+
+# Initialize encryption service
+encryption = AESEncryption(settings.ENCRYPTION_KEY)
 
 
 class LDAPTestConnection(BaseModel):
@@ -84,7 +89,16 @@ async def create_ldap_server(
             detail="Failed to connect to LDAP server. Please check your credentials and connection settings.",
         )
 
-    new_server = LDAPServer(**server_data.model_dump())
+    # Encrypt bind password if provided
+    server_dict = server_data.model_dump()
+    if server_dict.get('bind_password'):
+        encrypted_password = encryption.encrypt(server_dict['bind_password'].encode())
+        server_dict['bind_password'] = encrypted_password
+        server_dict['password_encrypted'] = True
+    else:
+        server_dict['password_encrypted'] = False
+
+    new_server = LDAPServer(**server_dict)
     db.add(new_server)
     await db.commit()
     await db.refresh(new_server)
@@ -108,8 +122,16 @@ async def update_ldap_server(
             status_code=status.HTTP_404_NOT_FOUND, detail="LDAP server not found"
         )
 
-    # Update fields
-    for field, value in server_data.model_dump(exclude_unset=True).items():
+    # Update fields with encryption for password
+    update_data = server_data.model_dump(exclude_unset=True)
+    
+    # Encrypt password if provided
+    if 'bind_password' in update_data and update_data['bind_password']:
+        encrypted_password = encryption.encrypt(update_data['bind_password'].encode())
+        update_data['bind_password'] = encrypted_password
+        update_data['password_encrypted'] = True
+    
+    for field, value in update_data.items():
         setattr(server, field, value)
 
     await db.commit()

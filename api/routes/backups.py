@@ -1,3 +1,5 @@
+import logging
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -5,12 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.security import get_current_user
 from api.models.models import Backup, BackupStatus, BackupType, LDAPServer
 from api.schemas.schemas import BackupCreate, BackupResponse
 
 router = APIRouter(prefix="/backups", tags=["Backups"])
+logger = logging.getLogger(__name__)
 
 
 class BatchDeleteRequest(BaseModel):
@@ -123,7 +127,16 @@ async def delete_backup(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found"
         )
 
-    # TODO: Delete backup file from disk
+    # Delete backup file from disk if it exists
+    if backup.file_path:
+        try:
+            file_path = Path(backup.file_path)
+            if file_path.exists():
+                file_path.unlink()
+                logger.info(f"Deleted backup file: {backup.file_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete backup file {backup.file_path}: {str(e)}")
+            # Continue with database deletion even if file deletion fails
 
     await db.delete(backup)
     await db.commit()

@@ -62,7 +62,8 @@ class LDAPServer(Base):
     use_ssl = Column(Boolean, default=False, nullable=False)
     base_dn = Column(String(500), nullable=False)
     bind_dn = Column(String(500))
-    bind_password = Column(String(500))
+    bind_password = Column(String(500))  # Encrypted if password_encrypted=True
+    password_encrypted = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

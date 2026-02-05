@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from api.core.database import AsyncSessionLocal
+from api.core.encryption import decrypt_ldap_password
 from api.models.models import Backup, BackupStatus, LDAPServer, RestoreJob
 from api.services.backup_service import BackupService
 from api.services.ldap_service import LDAPService
@@ -75,6 +76,12 @@ async def perform_restore(restore_id: int):
             if backup.compression_enabled:
                 file_path = backup_service.decompress_file(file_path)
 
+            # Decrypt bind password if encrypted
+            bind_password = decrypt_ldap_password(
+                ldap_server.bind_password,
+                ldap_server.password_encrypted
+            )
+
             # Create LDAP service
             ldap_service = LDAPService(
                 host=ldap_server.host,
@@ -82,7 +89,7 @@ async def perform_restore(restore_id: int):
                 use_ssl=ldap_server.use_ssl,
                 base_dn=ldap_server.base_dn,
                 bind_dn=ldap_server.bind_dn,
-                bind_password=ldap_server.bind_password,
+                bind_password=bind_password,
             )
 
             # Perform restore

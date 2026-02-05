@@ -1,6 +1,8 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,13 +19,15 @@ from api.schemas.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user."""
+@limiter.limit("3/hour")
+async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    """Register a new user. Rate limited to 3 registrations per hour."""
     # Check if username exists
     result = await db.execute(select(User).where(User.username == user_data.username))
     existing_user = result.scalar_one_or_none()
@@ -62,8 +66,9 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Login and get access token."""
+@limiter.limit("5/minute")
+async def login(request: Request, login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Login and get access token. Rate limited to 5 attempts per minute."""
     # Get user
     result = await db.execute(select(User).where(User.username == login_data.username))
     user = result.scalar_one_or_none()

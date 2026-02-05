@@ -258,17 +258,17 @@ async function loadServers() {
         
         tbody.innerHTML = servers.map(server => `
             <tr>
-                <td>${server.name}</td>
-                <td>${server.host}</td>
-                <td>${server.port}</td>
-                <td>${server.base_dn}</td>
+                <td>${escapeHtml(server.name)}</td>
+                <td>${escapeHtml(server.host)}</td>
+                <td>${parseInt(server.port)}</td>
+                <td>${escapeHtml(server.base_dn)}</td>
                 <td>
                     <span class="status-badge ${server.is_active ? 'status-completed' : 'status-failed'}">
                         ${server.is_active ? 'Active' : 'Inactive'}
                     </span>
                 </td>
                 <td>
-                    <button class="btn btn-primary" onclick="backupServer(${server.id})">Backup Now</button>
+                    <button class="btn btn-primary" onclick="backupServer(${parseInt(server.id)})">Backup Now</button>
                 </td>
             </tr>
         `).join('');
@@ -297,20 +297,21 @@ async function loadBackups() {
         
         tbody.innerHTML = backups.map(backup => `
             <tr>
-                <td>${backup.id}</td>
-                <td>Server #${backup.ldap_server_id}</td>
-                <td>${backup.backup_type}</td>
+                <td>${parseInt(backup.id)}</td>
+                <td>Server #${parseInt(backup.ldap_server_id)}</td>
+                <td>${escapeHtml(backup.backup_type)}</td>
                 <td>
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
                     <span class="status-badge status-${backup.status.replace('_', '-')}">
-                        ${backup.status}
+                        ${escapeHtml(backup.status)}
                     </span>
                 </td>
                 <td>${backup.file_size ? formatBytes(backup.file_size) : 'N/A'}</td>
-                <td>${backup.entry_count || 'N/A'}</td>
+                <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
                 <td>${new Date(backup.created_at).toLocaleString()}</td>
                 <td>
                     ${backup.status === 'completed' ? 
-                        `<button class="btn btn-success" onclick="restoreBackup(${backup.id})">Restore</button>` : 
+                        `<button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
                         ''}
                 </td>
             </tr>
@@ -340,15 +341,16 @@ async function loadRestores() {
         
         tbody.innerHTML = restores.map(restore => `
             <tr>
-                <td>${restore.id}</td>
-                <td>${restore.backup_id}</td>
-                <td>Server #${restore.ldap_server_id}</td>
+                <td>${parseInt(restore.id)}</td>
+                <td>${parseInt(restore.backup_id)}</td>
+                <td>Server #${parseInt(restore.ldap_server_id)}</td>
                 <td>
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
                     <span class="status-badge status-${restore.status.replace('_', '-')}">
-                        ${restore.status}
+                        ${escapeHtml(restore.status)}
                     </span>
                 </td>
-                <td>${restore.entries_restored || 'N/A'}</td>
+                <td>${restore.entries_restored ? parseInt(restore.entries_restored) : 'N/A'}</td>
                 <td>${new Date(restore.created_at).toLocaleString()}</td>
                 <td>-</td>
             </tr>
