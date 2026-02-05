@@ -35,7 +35,14 @@ async def list_audit_logs(
     
     # Apply filters
     if action:
-        query = query.where(AuditLog.action.ilike(f"%{action}%"))
+        # Escape SQL wildcard characters in the user-provided action to prevent
+        # unintended pattern expansion and to keep the search semantics safe.
+        safe_action = (
+            action.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        query = query.where(AuditLog.action.ilike(f"%{safe_action}%", escape="\\"))
     if resource_type:
         query = query.where(AuditLog.resource_type == resource_type)
     if user_id:
