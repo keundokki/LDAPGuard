@@ -45,13 +45,12 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('key')
     )
-    op.create_index(op.f('ix_system_settings_id'), 'system_settings', ['id'], unique=False)
     op.create_index(op.f('ix_system_settings_key'), 'system_settings', ['key'], unique=True)
+
 
 
 def downgrade():
     op.drop_index(op.f('ix_system_settings_key'), table_name='system_settings')
-    op.drop_index(op.f('ix_system_settings_id'), table_name='system_settings')
     op.drop_table('system_settings')
     
     op.drop_index(op.f('ix_api_keys_id'), table_name='api_keys')
