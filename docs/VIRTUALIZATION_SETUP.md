@@ -121,6 +121,8 @@ sudo dpkg-reconfigure slapd
 ldapwhoami -H ldap://localhost -D cn=admin,dc=production,dc=local -W
 ```
 
+See [docs/OPENLDAP_INSTALL.md](docs/OPENLDAP_INSTALL.md) for the full runbook.
+
 ### 5. Deploy Production LDAPGuard (VM2)
 
 ```bash
