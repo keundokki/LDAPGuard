@@ -656,10 +656,12 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Permissions</label>
-                    <label><input type="checkbox" name="apiKeyPerms" value="read" checked> Read</label>
-                    <label><input type="checkbox" name="apiKeyPerms" value="write"> Write</label>
-                    <label><input type="checkbox" name="apiKeyPerms" value="delete"> Delete</label>
+                    <label for="apiKeyPermissions">Permissions</label>
+                    <select id="apiKeyPermissions">
+                        <option value="read" selected>Read</option>
+                        <option value="write">Write</option>
+                        <option value="delete">Delete</option>
+                    </select>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeCreateApiKeyModal()">Cancel</button>
