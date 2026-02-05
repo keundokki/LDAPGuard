@@ -1,0 +1,134 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dockerfile: Dockerfile.api
+            image_name: ldapguard-api
+          - dockerfile: Dockerfile.worker
+            image_name: ldapguard-worker
+          - dockerfile: Dockerfile.web
+            image_name: ldapguard-web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          VERSION=${GITHUB_SHA:0:7}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building staging images with tag: ${VERSION}"
+
+      - name: Build and push ${{ matrix.image_name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:staging
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:staging-${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-to-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+
+    steps:
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          script: |
+            cd /opt/ldapguard-staging
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+            
+            # Pull latest staging images
+            docker-compose -f docker-compose.staging.yml --env-file .env.staging pull
+            
+            # Restart services with new images
+            docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
+            
+            # Run migrations if needed
+            docker-compose -f docker-compose.staging.yml exec -T api alembic upgrade head || true
+            
+            echo "✅ Staging deployment complete at $(date)"
+
+      - name: Notify deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}' === 'success' ? '✅' : '❌';
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: '${{ job.status }}',
+              context: 'staging-deployment',
+              description: `${status} Staging deployment`,
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+
+  health-check:
+    needs: deploy-to-staging
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check staging health
+        run: |
+          STAGING_URL="${{ secrets.STAGING_URL || 'http://localhost:8001' }}"
+          echo "Checking health of staging environment..."
+          
+          for i in {1..30}; do
+            if curl -sf "$STAGING_URL/health" > /dev/null; then
+              echo "✅ Staging is healthy"
+              exit 0
+            fi
+            echo "⏳ Waiting for staging to be healthy... ($i/30)"
+            sleep 2
+          done
+          
+          echo "❌ Staging health check failed"
+          exit 1
+        continue-on-error: true
+
+      - name: Report deployment status
+        if: failure()
+        run: |
+          echo "⚠️ Staging deployment status: Check logs"
+          exit 0
