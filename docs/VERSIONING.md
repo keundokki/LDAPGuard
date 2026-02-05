@@ -1,12 +1,19 @@
 # Image Tagging Strategy
 
-LDAPGuard uses a structured tagging strategy to distinguish between staging and production deployments.
+LDAPGuard uses a structured tagging strategy with **automatic patch version increment** for staging deployments.
 
 ## Version Management
 
 The project version is maintained in the [`VERSION`](../VERSION) file at the repository root.
 
 **Current Version:** See [VERSION](../VERSION) file
+
+### Auto-Increment Strategy
+
+The VERSION file is **automatically incremented** on every push to `dev`:
+
+- **PATCH** - Auto-incremented (0.0.6 → 0.0.7)
+- **MINOR/MAJOR** - Manually updated when needed
 
 ## Tagging Schemes
 
@@ -49,48 +56,85 @@ ghcr.io/keundokki/ldapguard-api:latest
 ## Version Lifecycle
 
 ```
-1. Update VERSION file → 2. Push to dev → 3. Auto-deploy staging-X.Y.Z → 4. Test in staging → 5. Manually deploy vX.Y.Z to production
+1. Push to dev → 2. Auto-increment PATCH → 3. Deploy staging-X.Y.Z → 4. Test → 5. Manual MINOR/MAJOR bump → 6. Create tag vX.Y.Z → 7. Deploy production
 ```
 
 ### Step-by-Step Workflow
 
-**1. Prepare New Version**
+**1. Automatic on Dev Push**
 ```bash
-# Update version file
-echo "0.0.7" > VERSION
-git add VERSION
-git commit -m "chore: bump version to 0.0.7"
 git push origin dev
+# GitHub Action automatically:
+# - Reads VERSION (0.0.6)
+# - Increments PATCH (0.0.7)
+# - Commits back to dev
+# - Builds and deploys staging-0.0.7
 ```
 
-**2. Automatic Staging Deployment**
-- GitHub Actions builds images
-- Tags: `staging`, `staging-0.0.7`, `staging-0.0.7-abc1234`
-- Deploys to staging environment
-- Image used: `staging-0.0.7`
+**2. Workflow runs automatically:**
+- CI/CD builds images with staging-0.0.7
+- Auto-increment workflow increments to 0.0.8
+- Next push will use 0.0.8
 
 **3. Test in Staging**
 ```bash
-# Verify staging deployment
+# Test current staging deployment
 curl https://staging.ldapguard.local/health
-
-# Run integration tests
 ./scripts/test-staging.sh
 ```
 
-**4. Promote to Production**
+**4. Bump Minor Version (when needed)**
 ```bash
-# Create production release tag
+# Only when you want MINOR or MAJOR version change
+echo "0.1.0" > VERSION
+git add VERSION
+git commit -m "chore: bump to minor version 0.1.0"
+git push origin dev
+# Next deployment: staging-0.1.0
+```
+
+**5. Promote to Production**
+```bash
 git checkout main
 git pull origin main
 git merge dev
-git tag -a v0.0.7 -m "Release v0.0.7"
-git push origin v0.0.7
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
 
 # Deploy via GitHub Actions
-# Actions → Deploy to Production
-# Image Tag: v0.0.7
 ```
+
+## Automatic Increment Details
+
+### How It Works
+
+The `auto-increment-version.yml` workflow:
+1. Triggers on push to `dev` (except VERSION file changes)
+2. Reads current version from VERSION file
+3. Increments PATCH version (Z+1)
+4. Commits and pushes back to dev
+5. Skips if last commit was already a version bump
+
+### Example Progression
+
+```
+Push 1: 0.0.6 → Auto-increments to 0.0.7 ✓
+Push 2: 0.0.7 → Auto-increments to 0.0.8 ✓
+Push 3: 0.0.8 → Auto-increments to 0.0.9 ✓
+Manual: Edit to 0.1.0
+Push 4: 0.1.0 → Auto-increments to 0.1.1 ✓
+```
+
+### When Does It Trigger?
+
+✅ Triggers on:
+- Code changes pushed to dev
+- Workflow updates
+
+❌ Does NOT trigger on:
+- VERSION file changes (avoids infinite loops)
+- Documentation changes
+- Comment-only changes
 
 ## Semantic Versioning
 
@@ -192,12 +236,12 @@ git tag -l "v*" | tail -1  # Should be v0.0.6 (previous release)
 
 ## Best Practices
 
-1. **Update VERSION before pushing to dev** - Ensures staging gets correct version
-2. **Test thoroughly in staging** - Version is locked, same image goes to production
-3. **Use semantic versioning** - Clear communication of change impact
-4. **Document changes** - Update CHANGELOG.md with each version
-5. **Tag production releases** - Create git tags for all production deployments
-6. **Never skip versions** - Always increment sequentially
+1. **Let auto-increment handle PATCH** - Don't manually update for bug fixes
+2. **Manual MINOR/MAJOR** - Only edit VERSION file for feature/breaking changes
+3. **Test thoroughly in staging** - Version is locked once in production
+4. **Tag production releases** - Always create git tags for production versions
+5. **Keep VERSION file synced** - Don't manually edit unless intentional bump
+6. **Document changes** - Update CHANGELOG.md with each version
 
 ## See Also
 
