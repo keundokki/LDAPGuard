@@ -13,18 +13,13 @@ permissions:
 
 jobs:
   rollback:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: production
 
     steps:
       - name: Rollback on production server
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.PRODUCTION_HOST }}
-          username: ${{ secrets.PRODUCTION_USER }}
-          key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          port: ${{ secrets.PRODUCTION_SSH_PORT || 22 }}
-          script: |
+        run: |
+          ssh ldapguard@${{ vars.PRODUCTION_VM_IP }} << 'EOF'
             cd /opt/ldapguard
             git fetch origin
             git checkout main
@@ -38,6 +33,7 @@ jobs:
             docker compose -f docker-compose.yml exec -T api alembic upgrade head || true
 
             echo "✅ Production rollback complete at $(date)"
+          EOF
 
       - name: Health check
         run: |
