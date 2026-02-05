@@ -175,9 +175,7 @@ async def test_ldap_connection(
         )
 
         # Try to connect and get basic info
-        entries = ldap_service.search_all_entries(
-            search_filter="(objectClass=*)"
-        )
+        entries = ldap_service.search_all_entries(search_filter="(objectClass=*)")
 
         entry_count = len(entries) if entries else 0
 
