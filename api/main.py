@@ -1,7 +1,11 @@
 import logging
+import sys
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from api.core.config import settings
 from api.routes import (
@@ -24,6 +28,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Create rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
@@ -31,13 +38,51 @@ app = FastAPI(
     description="Multi-container Podman app for centralized LDAP backup/restore",
 )
 
+# Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.on_event("startup")
+async def validate_configuration():
+    """Validate critical configuration on startup."""
+    errors = []
+    
+    # Check for default/insecure secrets
+    if settings.SECRET_KEY == "your-secret-key-change-in-production":
+        errors.append("SECRET_KEY is using default value - must be changed in production")
+    
+    if len(settings.SECRET_KEY) < 32:
+        errors.append("SECRET_KEY must be at least 32 characters long")
+    
+    if settings.ENCRYPTION_KEY == "your-encryption-key-32-bytes-min":
+        errors.append("ENCRYPTION_KEY is using default value - must be changed in production")
+    
+    if len(settings.ENCRYPTION_KEY) < 32:
+        errors.append("ENCRYPTION_KEY must be at least 32 bytes long")
+    
+    if errors:
+        logger.error("Configuration validation failed:")
+        for error in errors:
+            logger.error(f"  - {error}")
+        if not settings.DEBUG:
+            logger.error("Shutting down due to configuration errors")
+            sys.exit(1)
+        else:
+            logger.warning("Running in DEBUG mode with insecure configuration")
+
 # CORS middleware
+allowed_origins = ["*"] if settings.DEBUG else [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Include routers

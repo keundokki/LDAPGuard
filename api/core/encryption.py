@@ -59,6 +59,38 @@ class AESEncryption:
         return data
 
 
+def get_encryption_service() -> AESEncryption:
+    """Get encryption service instance."""
+    return AESEncryption(settings.ENCRYPTION_KEY)
+
+
+def decrypt_ldap_password(encrypted_password: Optional[str], is_encrypted: bool = False) -> Optional[str]:
+    """
+    Helper to decrypt LDAP password if encrypted.
+    
+    Args:
+        encrypted_password: The password (encrypted or plain text)
+        is_encrypted: Flag indicating if password is encrypted
+        
+    Returns:
+        Decrypted password string or None
+    """
+    if not encrypted_password:
+        return None
+    
+    if not is_encrypted:
+        # Password is not encrypted, return as-is
+        return encrypted_password
+    
+    try:
+        encryption = get_encryption_service()
+        decrypted_bytes = encryption.decrypt(encrypted_password)
+        return decrypted_bytes.decode('utf-8')
+    except Exception:
+        # If decryption fails, return None to avoid crashes
+        return None
+
+
 def encrypt_data(data: str, key: Optional[str] = None) -> str:
     """Encrypt a UTF-8 string using the configured encryption key."""
     encryption = AESEncryption(key or settings.ENCRYPTION_KEY)

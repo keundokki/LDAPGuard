@@ -1,5 +1,13 @@
 // Admin functionality for audit logs, API keys, settings, and config
 
+// HTML escaping to prevent XSS
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Track current admin section
 let currentAdminSection = 'users';
 
@@ -62,12 +70,12 @@ async function loadAuditLogs() {
         
         tbody.innerHTML = logs.map(log => `
             <tr>
-                <td>${new Date(log.created_at).toLocaleString()}</td>
-                <td>User #${log.user_id || 'System'}</td>
-                <td>${log.action}</td>
-                <td>${log.resource_type || '-'}</td>
-                <td>${log.details || '-'}</td>
-                <td>${log.ip_address || '-'}</td>
+                <td>${escapeHtml(new Date(log.created_at).toLocaleString())}</td>
+                <td>User #${log.user_id ? parseInt(log.user_id) : 'System'}</td>
+                <td>${escapeHtml(log.action)}</td>
+                <td>${escapeHtml(log.resource_type) || '-'}</td>
+                <td>${escapeHtml(log.details) || '-'}</td>
+                <td>${escapeHtml(log.ip_address) || '-'}</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -97,14 +105,14 @@ async function loadApiKeys() {
         
         tbody.innerHTML = keys.map(key => `
             <tr>
-                <td>${key.name}</td>
-                <td>${key.key_prefix}...</td>
-                <td>${key.permissions || 'read,write'}</td>
-                <td>${new Date(key.created_at).toLocaleString()}</td>
-                <td>${key.expires_at ? new Date(key.expires_at).toLocaleString() : 'Never'}</td>
-                <td>${key.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'Never'}</td>
+                <td>${escapeHtml(key.name)}</td>
+                <td>${escapeHtml(key.key_prefix)}...</td>
+                <td>${escapeHtml(key.permissions) || 'read,write'}</td>
+                <td>${escapeHtml(new Date(key.created_at).toLocaleString())}</td>
+                <td>${key.expires_at ? escapeHtml(new Date(key.expires_at).toLocaleString()) : 'Never'}</td>
+                <td>${key.last_used_at ? escapeHtml(new Date(key.last_used_at).toLocaleString()) : 'Never'}</td>
                 <td>
-                    <button class="btn btn-danger btn-sm" onclick="deleteApiKey(${key.id})">Delete</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteApiKey(${parseInt(key.id)})">Delete</button>
                 </td>
             </tr>
         `).join('');
@@ -438,15 +446,15 @@ async function loadUsers() {
         
         tbody.innerHTML = users.map(user => `
             <tr>
-                <td>${user.id}</td>
-                <td>${user.username}</td>
-                <td>${user.email}</td>
-                <td><span class="badge badge-${user.role}">${user.role}</span></td>
+                <td>${parseInt(user.id)}</td>
+                <td>${escapeHtml(user.username)}</td>
+                <td>${escapeHtml(user.email)}</td>
+                <td><span class="badge badge-${escapeHtml(user.role)}">${escapeHtml(user.role)}</span></td>
                 <td><span class="badge badge-${user.is_active ? 'success' : 'danger'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td>${new Date(user.created_at).toLocaleString()}</td>
+                <td>${escapeHtml(new Date(user.created_at).toLocaleString())}</td>
                 <td>
-                    <button class="btn btn-primary btn-sm" onclick="showEditUserModal(${user.id})">Edit</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})">Delete</button>
+                    <button class="btn btn-primary btn-sm" onclick="showEditUserModal(${parseInt(user.id)})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteUser(${parseInt(user.id)})">Delete</button>
                 </td>
             </tr>
         `).join('');

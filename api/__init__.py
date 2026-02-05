@@ -1,6 +1,6 @@
 """LDAPGuard - LDAP Directory Backup and Recovery System."""
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 __author__ = "LDAPGuard Contributors"
 __license__ = "MIT"
 

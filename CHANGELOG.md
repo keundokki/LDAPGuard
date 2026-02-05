@@ -2,6 +2,28 @@
 
 All notable changes to LDAPGuard will be documented in this file.
 
+## [0.0.5] - 2026-02-05
+
+### Security
+- **CRITICAL**: Added startup validation for hardcoded secrets (SECRET_KEY, ENCRYPTION_KEY)
+- **CRITICAL**: Implemented AES-256 encryption for LDAP bind passwords in database
+- Added rate limiting to authentication endpoints (5 login attempts/min, 3 registrations/hour)
+- Fixed XSS vulnerabilities by sanitizing all HTML output with escapeHtml()
+- Restricted CORS to specific origins in production mode
+- Added password_encrypted flag to track encryption status
+
+### Fixed
+- Implemented backup file deletion from disk (completed TODO)
+- Implemented restore task scheduling with background tasks (completed TODO)
+- Added proper error handling for password decryption failures
+- Fixed potential integer injection in onclick handlers
+
+### Changed
+- LDAP passwords now automatically encrypted on create/update operations
+- Backup and restore tasks now decrypt passwords before LDAP operations
+- Added slowapi dependency for rate limiting
+- Updated database schema (migration 003)
+
 ## [0.0.4] - 2026-02-05
 
 ### Added

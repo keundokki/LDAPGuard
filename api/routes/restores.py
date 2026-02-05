@@ -1,6 +1,7 @@
+import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,7 @@ from api.models.models import Backup, BackupStatus, RestoreJob
 from api.schemas.schemas import RestoreJobCreate, RestoreJobResponse
 
 router = APIRouter(prefix="/restores", tags=["Restores"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=List[RestoreJobResponse])
@@ -46,6 +48,7 @@ async def get_restore_job(restore_id: int, db: AsyncSession = Depends(get_db)):
 )
 async def create_restore_job(
     restore_data: RestoreJobCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -79,6 +82,13 @@ async def create_restore_job(
     await db.commit()
     await db.refresh(new_job)
 
-    # TODO: Schedule restore task
+    # Schedule restore task in background
+    try:
+        from workers.tasks.restore_task import perform_restore
+        background_tasks.add_task(perform_restore, new_job.id)
+        logger.info(f"Scheduled restore task for job {new_job.id}")
+    except Exception as e:
+        logger.error(f"Failed to schedule restore task: {str(e)}")
+        # Job is still created, can be processed later
 
     return new_job
