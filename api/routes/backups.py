@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.core.database import get_db
 from api.core.security import get_current_user
 from api.models.models import Backup, BackupStatus, BackupType, LDAPServer
@@ -35,7 +34,7 @@ async def list_backups(
 ):
     """List all backups with optional filtering."""
     query = select(Backup)
-    
+
     # Apply filters
     if server_id:
         query = query.where(Backup.server_id == server_id)
@@ -48,12 +47,12 @@ async def list_backups(
         query = query.join(LDAPServer).where(
             or_(
                 LDAPServer.name.ilike(f"%{search}%"),
-                LDAPServer.host.ilike(f"%{search}%")
+                LDAPServer.host.ilike(f"%{search}%"),
             )
         )
-    
+
     query = query.offset(skip).limit(limit).order_by(Backup.created_at.desc())
-    
+
     result = await db.execute(query)
     backups = result.scalars().all()
     return backups
@@ -143,6 +142,7 @@ async def delete_backup(
 
     return None
 
+
 @router.post("/batch-delete", status_code=status.HTTP_200_OK)
 async def batch_delete_backups(
     request: BatchDeleteRequest,
@@ -152,28 +152,27 @@ async def batch_delete_backups(
     """Delete multiple backups at once."""
     if not request.backup_ids:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No backup IDs provided"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No backup IDs provided"
         )
-    
+
     # Fetch all backups
-    result = await db.execute(
-        select(Backup).where(Backup.id.in_(request.backup_ids))
-    )
+    result = await db.execute(select(Backup).where(Backup.id.in_(request.backup_ids)))
     backups = result.scalars().all()
-    
+
     if len(backups) != len(request.backup_ids):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Some backups not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Some backups not found"
         )
-    
+
     # Delete all backups
     deleted_count = 0
     for backup in backups:
         await db.delete(backup)
         deleted_count += 1
-    
+
     await db.commit()
-    
-    return {"deleted": deleted_count, "message": f"Successfully deleted {deleted_count} backups"}
+
+    return {
+        "deleted": deleted_count,
+        "message": f"Successfully deleted {deleted_count} backups",
+    }

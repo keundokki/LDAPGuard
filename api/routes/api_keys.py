@@ -34,9 +34,9 @@ async def list_api_keys(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can manage API keys"
+            detail="Only administrators can manage API keys",
         )
-    
+
     result = await db.execute(
         select(APIKey).offset(skip).limit(limit).order_by(APIKey.created_at.desc())
     )
@@ -54,19 +54,19 @@ async def create_api_key(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can create API keys"
+            detail="Only administrators can create API keys",
         )
-    
+
     # Generate API key
     api_key = generate_api_key()
     key_hash = pwd_context.hash(api_key)
     key_prefix = api_key[:10]  # Store prefix for display
-    
+
     # Calculate expiration
     expires_at = None
     if key_data.expires_days:
         expires_at = datetime.utcnow() + timedelta(days=key_data.expires_days)
-    
+
     # Create API key record
     new_key = APIKey(
         name=key_data.name,
@@ -75,13 +75,13 @@ async def create_api_key(
         permissions=key_data.permissions,
         created_by=current_user.id,
         expires_at=expires_at,
-        is_active=True
+        is_active=True,
     )
-    
+
     db.add(new_key)
     await db.commit()
     await db.refresh(new_key)
-    
+
     # Return response with the actual API key (only shown once)
     response = APIKeyWithSecret(
         id=new_key.id,
@@ -93,9 +93,9 @@ async def create_api_key(
         last_used_at=new_key.last_used_at,
         is_active=new_key.is_active,
         created_at=new_key.created_at,
-        api_key=api_key  # Only shown on creation
+        api_key=api_key,  # Only shown on creation
     )
-    
+
     return response
 
 
@@ -109,21 +109,20 @@ async def delete_api_key(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can delete API keys"
+            detail="Only administrators can delete API keys",
         )
-    
+
     result = await db.execute(select(APIKey).where(APIKey.id == key_id))
     api_key = result.scalar_one_or_none()
-    
+
     if not api_key:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
         )
-    
+
     await db.delete(api_key)
     await db.commit()
-    
+
     return None
 
 
@@ -137,20 +136,19 @@ async def revoke_api_key(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can revoke API keys"
+            detail="Only administrators can revoke API keys",
         )
-    
+
     result = await db.execute(select(APIKey).where(APIKey.id == key_id))
     api_key = result.scalar_one_or_none()
-    
+
     if not api_key:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
         )
-    
+
     api_key.is_active = False
     await db.commit()
     await db.refresh(api_key)
-    
+
     return api_key

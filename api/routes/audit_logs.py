@@ -26,30 +26,29 @@ async def list_audit_logs(
     # Only admins can view audit logs
     if _current_user.role.value != "admin":
         from fastapi import HTTPException, status
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view audit logs"
+            detail="Only administrators can view audit logs",
         )
-    
+
     query = select(AuditLog)
-    
+
     # Apply filters
     if action:
         # Escape SQL wildcard characters in the user-provided action to prevent
         # unintended pattern expansion and to keep the search semantics safe.
         safe_action = (
-            action.replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
+            action.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         )
         query = query.where(AuditLog.action.ilike(f"%{safe_action}%", escape="\\"))
     if resource_type:
         query = query.where(AuditLog.resource_type == resource_type)
     if user_id:
         query = query.where(AuditLog.user_id == user_id)
-    
+
     query = query.offset(skip).limit(limit).order_by(desc(AuditLog.created_at))
-    
+
     result = await db.execute(query)
     logs = result.scalars().all()
     return logs
@@ -63,20 +62,19 @@ async def get_audit_log(
 ):
     """Get audit log by ID. Admin only."""
     from fastapi import HTTPException, status
-    
+
     if _current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view audit logs"
+            detail="Only administrators can view audit logs",
         )
-    
+
     result = await db.execute(select(AuditLog).where(AuditLog.id == log_id))
     log = result.scalar_one_or_none()
-    
+
     if not log:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Audit log not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Audit log not found"
         )
-    
+
     return log

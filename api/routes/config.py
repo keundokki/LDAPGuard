@@ -29,9 +29,9 @@ async def export_configuration(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can export configuration"
+            detail="Only administrators can export configuration",
         )
-    
+
     # Get all servers
     servers_result = await db.execute(select(LDAPServer))
     servers = servers_result.scalars().all()
@@ -47,7 +47,7 @@ async def export_configuration(
         }
         for s in servers
     ]
-    
+
     # Get all scheduled backups
     schedules_result = await db.execute(select(ScheduledBackup))
     schedules = schedules_result.scalars().all()
@@ -62,7 +62,7 @@ async def export_configuration(
         }
         for s in schedules
     ]
-    
+
     # Get all users (excluding passwords)
     users_result = await db.execute(select(User))
     users = users_result.scalars().all()
@@ -76,11 +76,9 @@ async def export_configuration(
         }
         for u in users
     ]
-    
+
     return ConfigurationExport(
-        servers=servers_data,
-        scheduled_backups=schedules_data,
-        users=users_data
+        servers=servers_data, scheduled_backups=schedules_data, users=users_data
     )
 
 
@@ -94,16 +92,11 @@ async def import_configuration(
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can import configuration"
+            detail="Only administrators can import configuration",
         )
-    
-    imported_counts = {
-        "servers": 0,
-        "scheduled_backups": 0,
-        "users": 0,
-        "errors": []
-    }
-    
+
+    imported_counts = {"servers": 0, "scheduled_backups": 0, "users": 0, "errors": []}
+
     # Import servers
     if config.servers:
         for server_data in config.servers:
@@ -113,7 +106,7 @@ async def import_configuration(
                     select(LDAPServer).where(LDAPServer.name == server_data.get("name"))
                 )
                 existing = result.scalar_one_or_none()
-                
+
                 if not existing:
                     server = LDAPServer(
                         name=server_data.get("name"),
@@ -127,10 +120,10 @@ async def import_configuration(
                     imported_counts["servers"] += 1
             except Exception as e:
                 imported_counts["errors"].append(f"Server import error: {str(e)}")
-    
+
     # Commit servers first so we have IDs for scheduled backups
     await db.commit()
-    
+
     # Import scheduled backups
     if config.scheduled_backups:
         for schedule_data in config.scheduled_backups:
@@ -142,7 +135,7 @@ async def import_configuration(
                         select(LDAPServer).where(LDAPServer.id == server_id)
                     )
                     server = result.scalar_one_or_none()
-                    
+
                     if server:
                         # Check if schedule already exists
                         result = await db.execute(
@@ -151,7 +144,7 @@ async def import_configuration(
                             )
                         )
                         existing = result.scalar_one_or_none()
-                        
+
                         if not existing:
                             schedule = ScheduledBackup(
                                 name=schedule_data.get("name"),
@@ -165,7 +158,7 @@ async def import_configuration(
                             imported_counts["scheduled_backups"] += 1
             except Exception as e:
                 imported_counts["errors"].append(f"Schedule import error: {str(e)}")
-    
+
     # Import users
     if config.users:
         for user_data in config.users:
@@ -175,12 +168,12 @@ async def import_configuration(
                     select(User).where(User.username == user_data.get("username"))
                 )
                 existing = result.scalar_one_or_none()
-                
+
                 if not existing:
                     # Create user with a default password (must be changed)
                     default_password = "changeme123"
                     hashed_password = pwd_context.hash(default_password)
-                    
+
                     user = User(
                         username=user_data.get("username"),
                         email=user_data.get("email"),
@@ -193,9 +186,9 @@ async def import_configuration(
                     imported_counts["users"] += 1
             except Exception as e:
                 imported_counts["errors"].append(f"User import error: {str(e)}")
-    
+
     await db.commit()
-    
+
     return {
         "message": "Configuration import completed",
         "imported": imported_counts,

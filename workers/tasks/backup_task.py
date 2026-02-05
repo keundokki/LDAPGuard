@@ -55,8 +55,7 @@ async def perform_backup(backup_id: int):
 
             # Decrypt bind password if encrypted
             bind_password = decrypt_ldap_password(
-                ldap_server.bind_password,
-                ldap_server.password_encrypted
+                ldap_server.bind_password, ldap_server.password_encrypted
             )
 
             # Create LDAP service

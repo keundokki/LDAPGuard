@@ -236,6 +236,7 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyWithSecret(APIKeyResponse):
     """Response with the actual API key - only returned on creation"""
+
     api_key: str
 
 
