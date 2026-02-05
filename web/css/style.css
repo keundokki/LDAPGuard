@@ -579,3 +579,38 @@ footer a:hover {
 .btn-secondary:hover {
     background: var(--border-color);
 }
+
+/* Badge Styles */
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-admin {
+    background-color: #dc2626;
+    color: white;
+}
+
+.badge-operator {
+    background-color: #2563eb;
+    color: white;
+}
+
+.badge-viewer {
+    background-color: #64748b;
+    color: white;
+}
+
+.badge-success {
+    background-color: #16a34a;
+    color: white;
+}
+
+.badge-danger {
+    background-color: #dc2626;
+    color: white;
+}
