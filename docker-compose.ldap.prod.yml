@@ -1,6 +1,0 @@
-version: '3.8'
-
-# Deprecated: production OpenLDAP is installed directly on the LDAP VM.
-# See docs/OPENLDAP_INSTALL.md and do not use this file.
-
-services: {}
