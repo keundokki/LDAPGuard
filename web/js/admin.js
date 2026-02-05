@@ -598,8 +598,7 @@ async function deleteUser(userId) {
         const response = await fetch(`/api/auth/users/${userId}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${getAuthToken()}`,
-                'Content-Type': 'application/json'
+                'Authorization': `Bearer ${getAuthToken()}`
             }
         });
         
