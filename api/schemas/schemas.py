@@ -195,3 +195,74 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+# Audit log schemas
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int]
+    action: str
+    resource_type: Optional[str]
+    resource_id: Optional[int]
+    details: Optional[str]
+    ip_address: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# API Key schemas
+class APIKeyCreate(BaseModel):
+    name: str
+    permissions: Optional[str] = "read,write"
+    expires_days: Optional[int] = None  # None means no expiration
+
+
+class APIKeyResponse(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    permissions: Optional[str]
+    created_by: int
+    expires_at: Optional[datetime]
+    last_used_at: Optional[datetime]
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class APIKeyWithSecret(APIKeyResponse):
+    """Response with the actual API key - only returned on creation"""
+    api_key: str
+
+
+# System settings schemas
+class SystemSettingUpdate(BaseModel):
+    key: str
+    value: str
+
+
+class SystemSettingResponse(BaseModel):
+    id: int
+    key: str
+    value: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Configuration import/export schemas
+class ConfigurationExport(BaseModel):
+    servers: list
+    scheduled_backups: list
+    users: list
+
+
+class ConfigurationImport(BaseModel):
+    servers: Optional[list] = []
+    scheduled_backups: Optional[list] = []
+    users: Optional[list] = []

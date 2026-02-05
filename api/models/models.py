@@ -42,7 +42,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255))
-    role = Column(Enum(UserRole), default=UserRole.VIEWER, nullable=False)
+    role = Column(Enum(UserRole, values_callable=lambda x: [e.value for e in x]), default=UserRole.VIEWER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     ldap_auth = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -77,8 +77,8 @@ class Backup(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
-    backup_type = Column(Enum(BackupType), default=BackupType.FULL, nullable=False)
-    status = Column(Enum(BackupStatus), default=BackupStatus.PENDING, nullable=False)
+    backup_type = Column(Enum(BackupType, values_callable=lambda x: [e.value for e in x]), default=BackupType.FULL, nullable=False)
+    status = Column(Enum(BackupStatus, values_callable=lambda x: [e.value for e in x]), default=BackupStatus.PENDING, nullable=False)
     file_path = Column(String(1000))
     file_size = Column(Integer)  # Size in bytes
     encrypted = Column(Boolean, default=True, nullable=False)
@@ -107,7 +107,7 @@ class RestoreJob(Base):
     id = Column(Integer, primary_key=True, index=True)
     backup_id = Column(Integer, ForeignKey("backups.id"), nullable=False)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
-    status = Column(Enum(BackupStatus), default=BackupStatus.PENDING, nullable=False)
+    status = Column(Enum(BackupStatus, values_callable=lambda x: [e.value for e in x]), default=BackupStatus.PENDING, nullable=False)
     selective_restore = Column(Boolean, default=False, nullable=False)
     restore_filter = Column(Text)  # LDAP filter for selective restore
     point_in_time = Column(DateTime(timezone=True))  # For point-in-time recovery
@@ -125,7 +125,7 @@ class ScheduledBackup(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     ldap_server_id = Column(Integer, ForeignKey("ldap_servers.id"), nullable=False)
-    backup_type = Column(Enum(BackupType), default=BackupType.FULL, nullable=False)
+    backup_type = Column(Enum(BackupType, values_callable=lambda x: [e.value for e in x]), default=BackupType.FULL, nullable=False)
     cron_expression = Column(String(100), nullable=False)  # Cron schedule
     is_active = Column(Boolean, default=True, nullable=False)
     retention_days = Column(Integer, default=30, nullable=False)
@@ -144,3 +144,26 @@ class AuditLog(Base):
     details = Column(Text)
     ip_address = Column(String(45))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    key_hash = Column(String(255), nullable=False, unique=True)  # Hashed API key
+    key_prefix = Column(String(10), nullable=False)  # First few chars for display
+    permissions = Column(String(255))  # Comma-separated permissions
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    last_used_at = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

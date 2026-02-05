@@ -4,7 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.core.config import settings
-from api.routes import auth, backups, ldap_servers, restores
+from api.routes import (
+    api_keys,
+    audit_logs,
+    auth,
+    backups,
+    config,
+    ldap_servers,
+    restores,
+    scheduled_backups,
+    settings as settings_routes,
+)
 from api.services.metrics_service import MetricsService
 
 # Configure logging
@@ -35,6 +45,11 @@ app.include_router(auth.router)
 app.include_router(ldap_servers.router)
 app.include_router(backups.router)
 app.include_router(restores.router)
+app.include_router(scheduled_backups.router)
+app.include_router(audit_logs.router)
+app.include_router(api_keys.router)
+app.include_router(settings_routes.router)
+app.include_router(config.router)
 
 
 @app.get("/")
