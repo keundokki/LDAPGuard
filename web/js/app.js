@@ -1,5 +1,5 @@
 // API base URL
-const API_URL = '/api';
+const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || window.API_URL || '/api';
 
 // Auth helper functions
 function getAuthToken() {
