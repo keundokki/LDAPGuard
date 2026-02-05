@@ -441,6 +441,7 @@ async function loadUsers() {
                 <td>${parseInt(user.id)}</td>
                 <td>${escapeHtml(user.username)}</td>
                 <td>${escapeHtml(user.email)}</td>
+                <!-- Note: role is a backend enum value (admin|operator|viewer), safe for use in CSS class -->
                 <td><span class="badge badge-${user.role}">${escapeHtml(user.role)}</span></td>
                 <td><span class="badge badge-${user.is_active ? 'success' : 'danger'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
                 <td>${new Date(user.created_at).toLocaleString()}</td>

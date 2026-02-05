@@ -301,6 +301,7 @@ async function loadBackups() {
                 <td>Server #${parseInt(backup.ldap_server_id)}</td>
                 <td>${escapeHtml(backup.backup_type)}</td>
                 <td>
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
                     <span class="status-badge status-${backup.status.replace('_', '-')}">
                         ${escapeHtml(backup.status)}
                     </span>
@@ -344,6 +345,7 @@ async function loadRestores() {
                 <td>${parseInt(restore.backup_id)}</td>
                 <td>Server #${parseInt(restore.ldap_server_id)}</td>
                 <td>
+                    <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
                     <span class="status-badge status-${restore.status.replace('_', '-')}">
                         ${escapeHtml(restore.status)}
                     </span>
