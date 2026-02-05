@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -95,7 +97,12 @@ async def import_configuration(
             detail="Only administrators can import configuration",
         )
 
-    imported_counts = {"servers": 0, "scheduled_backups": 0, "users": 0, "errors": []}
+    imported_counts: dict[str, Any] = {
+        "servers": 0,
+        "scheduled_backups": 0,
+        "users": 0,
+        "errors": [],
+    }
 
     # Import servers
     if config.servers:
