@@ -1,13 +1,5 @@
 // Admin functionality for audit logs, API keys, settings, and config
 
-// HTML escaping to prevent XSS
-function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Track current admin section
 let currentAdminSection = 'users';
 
@@ -449,9 +441,9 @@ async function loadUsers() {
                 <td>${parseInt(user.id)}</td>
                 <td>${escapeHtml(user.username)}</td>
                 <td>${escapeHtml(user.email)}</td>
-                <td><span class="badge badge-${escapeHtml(user.role)}">${escapeHtml(user.role)}</span></td>
+                <td><span class="badge badge-${user.role}">${escapeHtml(user.role)}</span></td>
                 <td><span class="badge badge-${user.is_active ? 'success' : 'danger'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td>${escapeHtml(new Date(user.created_at).toLocaleString())}</td>
+                <td>${new Date(user.created_at).toLocaleString()}</td>
                 <td>
                     <button class="btn btn-primary btn-sm" onclick="showEditUserModal(${parseInt(user.id)})">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteUser(${parseInt(user.id)})">Delete</button>

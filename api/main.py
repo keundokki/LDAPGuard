@@ -1,13 +1,14 @@
 import logging
 import sys
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from api.core.config import settings
+from api.core.redis import close_redis_client, get_redis_client
 from api.routes import (
     api_keys,
     audit_logs,
@@ -72,10 +73,18 @@ async def validate_configuration():
             logger.warning("Running in DEBUG mode with insecure configuration")
 
 # CORS middleware
-allowed_origins = ["*"] if settings.DEBUG else [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+if settings.CORS_ALLOWED_ORIGINS:
+    # Use configured origins if provided
+    allowed_origins = settings.CORS_ALLOWED_ORIGINS.split(',')
+elif settings.DEBUG:
+    # Allow all in debug mode
+    allowed_origins = ["*"]
+else:
+    # Default production origins (localhost for testing)
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -130,9 +139,19 @@ async def startup_event():
     """Startup event handler."""
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Debug mode: {settings.DEBUG}")
+    
+    # Initialize Redis connection
+    try:
+        await get_redis_client()
+        logger.info("Redis client initialized")
+    except Exception as e:
+        logger.warning(f"Redis client initialization failed: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler."""
     logger.info(f"Shutting down {settings.APP_NAME}")
+    
+    # Close Redis connection
+    await close_redis_client()
