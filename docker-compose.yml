@@ -37,7 +37,7 @@ services:
       - ldapguard-network
 
   api:
-    image: ghcr.io/keundokki/ldapguard-api:latest
+    image: ghcr.io/keundokki/ldapguard-api:${IMAGE_TAG:-latest}
     container_name: ldapguard-api
     environment:
       DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
@@ -64,7 +64,7 @@ services:
       - ldapguard-network
 
   worker:
-    image: ghcr.io/keundokki/ldapguard-worker:latest
+    image: ghcr.io/keundokki/ldapguard-worker:${IMAGE_TAG:-latest}
     container_name: ldapguard-worker
     environment:
       DATABASE_URL: postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ldapguard
@@ -83,7 +83,7 @@ services:
       - ldapguard-network
 
   web:
-    image: ghcr.io/keundokki/ldapguard-web:latest
+    image: ghcr.io/keundokki/ldapguard-web:${IMAGE_TAG:-latest}
     container_name: ldapguard-web
     environment:
       API_URL: http://api:8000

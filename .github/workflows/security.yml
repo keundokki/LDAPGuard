@@ -45,7 +45,6 @@ jobs:
     
     - name: Check for known security vulnerabilities
       run: safety check --json
-      continue-on-error: true
 
   container-scan:
     runs-on: ubuntu-latest

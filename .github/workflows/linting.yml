@@ -25,12 +25,9 @@ jobs:
     
     - name: Run flake8
       run: flake8 api workers --max-line-length=88 --statistics
-      continue-on-error: true
     
     - name: Check code formatting with black
       run: black --check api workers
-      continue-on-error: true
     
     - name: Run mypy type checking
       run: mypy api workers --ignore-missing-imports
-      continue-on-error: true

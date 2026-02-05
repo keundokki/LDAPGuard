@@ -1,0 +1,62 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g., v0.0.5)"
+        required: true
+        default: "latest"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.PRODUCTION_SSH_PORT || 22 }}
+          script: |
+            cd /opt/ldapguard
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            # Pull specific image tag
+            export IMAGE_TAG="${{ inputs.image_tag }}"
+
+            docker compose -f docker-compose.yml pull
+
+            # Restart services
+            docker compose -f docker-compose.yml up -d
+
+            # Run migrations
+            docker compose -f docker-compose.yml exec -T api alembic upgrade head || true
+
+            echo "✅ Production deployment complete at $(date)"
+
+      - name: Health check
+        run: |
+          PROD_URL="${{ secrets.PRODUCTION_URL || 'http://localhost:8000' }}"
+          echo "Checking production health..."
+
+          for i in {1..30}; do
+            if curl -sf "$PROD_URL/health" > /dev/null; then
+              echo "✅ Production is healthy"
+              exit 0
+            fi
+            echo "⏳ Waiting for production to be healthy... ($i/30)"
+            sleep 2
+          done
+
+          echo "❌ Production health check failed"
+          exit 1
