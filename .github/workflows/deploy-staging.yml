@@ -37,12 +37,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract version from VERSION file
         id: meta
         run: |
-          VERSION=${GITHUB_SHA:0:7}
+          VERSION=$(cat VERSION | tr -d '\n')
+          COMMIT_SHA=${GITHUB_SHA:0:7}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Building staging images with tag: ${VERSION}"
+          echo "commit=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "Building staging images with version: staging-${VERSION} (commit: ${COMMIT_SHA})"
 
       - name: Build and push ${{ matrix.image_name }}
         uses: docker/build-push-action@v5
@@ -54,6 +56,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:staging
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:staging-${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:staging-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -63,6 +66,16 @@ jobs:
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
 
     steps:
+      - name: Checkout code to get VERSION
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '\n')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Deploying staging version: staging-${VERSION}"
+
       - name: Deploy to staging server
         run: |
           ssh ldapguard@${{ vars.STAGING_VM_IP }} << 'EOF'
@@ -71,16 +84,19 @@ jobs:
             git checkout dev
             git pull origin dev
             
+            # Set staging tag
+            export STAGING_TAG=staging-${{ steps.version.outputs.version }}
+            
             # Pull latest staging images
-            docker-compose -f docker-compose.staging.yml --env-file .env.staging pull
+            docker-compose -f docker-compose.staging.yml pull
             
             # Restart services with new images
-            docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
+            docker-compose -f docker-compose.staging.yml up -d
             
             # Run migrations if needed
             docker-compose -f docker-compose.staging.yml exec -T api alembic upgrade head || true
             
-            echo "✅ Staging deployment complete at $(date)"
+            echo "✅ Staging deployment complete: staging-${{ steps.version.outputs.version }} at $(date)"
           EOF
 
       - name: Notify deployment status
