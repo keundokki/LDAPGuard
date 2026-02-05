@@ -1,30 +1,6 @@
 version: '3.8'
 
 services:
-  openldap:
-    image: osixia/openldap:latest
-    container_name: ldapguard-openldap
-    environment:
-      LDAP_ORGANISATION: "Production Company"
-      LDAP_DOMAIN: "production.local"
-      LDAP_BASE_DN: "dc=production,dc=local"
-      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-admin}
-      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD:-config}
-    volumes:
-      - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
-    ports:
-      - "389:389"    # Standard LDAP port
-      - "636:636"    # LDAP with TLS
-    networks:
-      - ldapguard-network
-    healthcheck:
-      test: ["CMD", "ldapwhoami", "-H", "ldap://localhost", "-D", "cn=admin,dc=production,dc=local", "-w", "${LDAP_ADMIN_PASSWORD:-admin}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   postgres:
     image: postgres:15-alpine
     container_name: ldapguard-postgres
@@ -122,8 +98,6 @@ volumes:
   postgres_data:
   redis_data:
   backup_data:
-  ldap_data:
-  ldap_config:
 
 networks:
   ldapguard-network:

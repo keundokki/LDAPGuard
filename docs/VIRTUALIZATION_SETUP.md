@@ -121,7 +121,7 @@ cp .env.example .env
 # Edit .env with production values
 nano .env
 
-# Start (includes OpenLDAP)
+# Start (no mock LDAP - add real servers via web UI)
 docker-compose up -d
 
 # Verify all containers
@@ -135,7 +135,7 @@ docker-compose ps
 - Worker
 - Web UI
 - Nginx reverse proxy
-- **OpenLDAP** (production instance)
+- ⚠️ **No LDAP included** - add your real LDAP servers via the web UI
 
 ---
 

@@ -179,29 +179,26 @@ docker exec ldapguard-staging-api file /backups/backup_*.enc
 
 ---
 
-## Production: Add OpenLDAP Server via Web UI
+## Production: Add Real LDAP Servers
 
-### Connect Production to OpenLDAP
+### Connect Production to Real LDAP
 
 1. SSH to production VM
 2. Access web UI: http://prod-vm
-3. Add OpenLDAP server:
-   - **Name**: Production LDAP
-   - **Host**: openldap (docker container name on production)
-   - **Port**: 389
-   - **Bind DN**: cn=admin,dc=production,dc=local
-   - **Bind Password**: (value from LDAP_ADMIN_PASSWORD env var, default: admin)
-   - **Base DN**: dc=production,dc=local
+3. Add your real LDAP servers:
+   - **Name**: Corporate LDAP
+   - **Host**: your-corporate-ldap.com
+   - **Port**: 389 or 636 (TLS)
+   - **Bind DN**: cn=admin,dc=company,dc=com
+   - **Bind Password**: ***
+   - **Base DN**: dc=company,dc=com
 
-4. Click "Test Connection"
-   - Should succeed ✅
+### Test with Real Data
 
-### Test with Production Data
-
-Once connected, all tests (1-6 above) work identically on production:
-- Backups of production LDAP data
-- Restores to production LDAP servers
-- Encryption of production data
+Once connected, all tests (1-6 above) work identically:
+- Backups of real LDAP data
+- Restores to real LDAP servers
+- Encryption of real data
 - Rate limiting active
 - All security features working
 
@@ -235,7 +232,6 @@ docker-compose up -d
 # Access
 API: http://prod-vm:8000
 Web: http://prod-vm:80
-OpenLDAP: localhost:389 (internal hostname: openldap)
 ```
 
 ---
@@ -296,18 +292,11 @@ Web: http://prod-vm:80
 docker-compose -f docker-compose.staging.yml logs api
 ```
 
-### Can't connect to LDAP (Staging)?
+### Can't connect to LDAP?
 ```bash
 # Check LDAP container
 docker-compose -f docker-compose.ldap.yml ps
 docker exec ldapguard-ldap ldapwhoami -H ldap://localhost -D cn=admin,dc=test,dc=local -w admin
-```
-
-### Can't connect to LDAP (Production)?
-```bash
-# Check LDAP container
-docker-compose ps | grep ldap
-docker exec ldapguard-openldap ldapwhoami -H ldap://localhost -D cn=admin,dc=production,dc=local -w admin
 ```
 
 ### Restore fails?
