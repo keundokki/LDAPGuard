@@ -1,24 +1,23 @@
-name: Deploy to Production
+name: Rollback Production
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag to deploy (e.g., v0.0.5)"
+        description: "Image tag to rollback to (e.g., v0.0.4)"
         required: true
-        default: "v0.0.0"
 
 permissions:
   contents: read
   packages: read
 
 jobs:
-  deploy:
+  rollback:
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - name: Deploy to production server
+      - name: Rollback on production server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -31,18 +30,14 @@ jobs:
             git checkout main
             git pull origin main
 
-            # Pull specific image tag
             export IMAGE_TAG="${{ inputs.image_tag }}"
 
             docker compose -f docker-compose.yml pull
-
-            # Restart services
             docker compose -f docker-compose.yml up -d
 
-            # Run migrations
             docker compose -f docker-compose.yml exec -T api alembic upgrade head || true
 
-            echo "✅ Production deployment complete at $(date)"
+            echo "✅ Production rollback complete at $(date)"
 
       - name: Health check
         run: |
