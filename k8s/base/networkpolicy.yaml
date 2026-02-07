@@ -1,22 +1,25 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: ldapguard-restrict
+  name: ldapguard-network-policy
   namespace: ldapguard
+  labels:
+    app.kubernetes.io/name: ldapguard
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/part-of: ldapguard
+      app.kubernetes.io/name: ldapguard
   policyTypes:
     - Ingress
-    - Egress
   ingress:
+    # Allow all intra-namespace traffic between ldapguard pods
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/part-of: ldapguard
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/part-of: ldapguard
+              app.kubernetes.io/name: ldapguard
+    # Allow Traefik ingress controller to reach web pods
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 80
+          protocol: TCP

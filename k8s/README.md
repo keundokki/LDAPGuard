@@ -1,72 +1,143 @@
-# LDAPGuard Kubernetes Deployment
+# LDAPGuard — Kubernetes Deployment
 
-## Overview
-This directory contains production-ready Kubernetes manifests for deploying LDAPGuard. Customize files with `.example` suffix before applying.
+Production-ready Kubernetes manifests using Kustomize base/overlays, compatible with ArgoCD and manual `kubectl` deployments.
 
-## Quick Start
-1. Create secrets.yaml from secrets.example.yaml and update values.
-2. Customize ingressroute.example.yaml for your domain and TLS certResolver.
-3. Customize storageclass.example.yaml for your storage backend.
-4. Optionally adjust resource-limits.example.yaml and kustomization-production.example.yaml.
-5. Apply manifests:
-   ```bash
-   kubectl apply -k k8s/
-   ```
-6. Verify:
-   - All pods Running: `kubectl get pods -n ldapguard`
-   - Alembic migrations succeed: `kubectl logs -n ldapguard deployment/api`
-   - HTTPS health: `curl https://<your-domain>/health`
-   - API reachable: `curl https://<your-domain>/api/auth/login`
-   - HTTP redirects to HTTPS: `curl http://<your-domain>/`
+## Directory Structure
 
-## File Structure
-- `namespace.yaml` — Namespace definition
-- `configmap-app.yaml` — App config (non-secret env vars)
-- `configmap-nginx.yaml` — nginx.conf for web
-- `secrets.example.yaml` — Secret values (passwords, keys)
-- `pvc-postgres.yaml`, `pvc-redis.yaml`, `pvc-backup.yaml` — PersistentVolumeClaims
-- `storageclass.example.yaml` — Example NFS StorageClass
-- `postgres-statefulset.yaml`, `postgres-service.yaml` — PostgreSQL
-- `redis-statefulset.yaml`, `redis-service.yaml` — Redis
-- `api-deployment.yaml`, `api-service.yaml` — API
-- `worker-deployment.yaml` — Worker
-- `web-deployment.yaml`, `web-service.yaml` — Web
-- `ingressroute.example.yaml` — Traefik IngressRoute (HTTPS)
-- `middleware.yaml` — Traefik Middleware (redirect, headers)
-- `networkpolicy.yaml` — NetworkPolicy
-- `resource-limits.example.yaml` — Resource limits
-- `kustomization.yaml` — Base kustomize config
-- `kustomization-production.example.yaml` — Production overlay
+```
+k8s/
+  base/                        # Shared, environment-agnostic resources
+    kustomization.yaml
+    ...deployments, services, configmaps, PVCs, networkpolicy...
+  overlays/
+    production/                # Production-specific: secrets, ingress, image pins
+      kustomization.yaml       # References ../../base + secrets + ingress + patches
+      secrets.example.yaml     # Template — copy to secrets.yaml
+      ingressroute.example.yaml
+      resource-limits.example.yaml
+      storageclass.example.yaml
+```
 
-## Design Decisions
-- Service names match docker-compose for compatibility
-- StatefulSets for Postgres/Redis
-- Worker is singleton (1 replica)
-- initContainers for dependency ordering
-- PGDATA set to subdirectory
-- DATABASE_URL in Secret, REDIS_URL in ConfigMap
-- .example files require customization
+## Prerequisites
 
-## Customization
-- Update secrets.example.yaml and create secrets.yaml
-- Set domain and certResolver in ingressroute.example.yaml
-- Adjust storageclass.example.yaml for your backend
-- Tune resource-limits.example.yaml
-- Pin image tags in kustomization-production.example.yaml
+- Kubernetes cluster (1.25+)
+- `kubectl` configured for your cluster
+- Traefik ingress controller installed (with CRD support)
+- Storage provisioner supporting `ReadWriteMany` for shared backup volume (NFS, CephFS, EFS, etc.)
 
-## Traefik HTTPS
-- Uses IngressRoute CRD
-- TLS termination via Traefik
-- Middleware for HTTPS redirect and security headers
+## Quick Start (manual kubectl)
 
-## Troubleshooting
-- Check pod logs for errors
-- Ensure PVCs are bound
-- Verify domain and TLS certs
+```bash
+cd k8s/overlays/production/
 
-## References
-- [docker-compose.yml](../docker-compose.yml)
-- [config/nginx.conf](../config/nginx.conf)
-- [api/core/config.py](../api/core/config.py)
-- [.env.example](../.env.example)
-- [Dockerfile.api](../Dockerfile.api)
+# 1. Create secrets
+cp secrets.example.yaml secrets.yaml
+# Edit secrets.yaml — generate base64-encoded values:
+#   echo -n 'your-password' | base64
+
+# 2. Create ingress
+cp ingressroute.example.yaml ingressroute.yaml
+# Edit ingressroute.yaml — set your domain and certResolver
+
+# 3. Create resource limits
+cp resource-limits.example.yaml resource-limits.yaml
+
+# 4. Deploy
+kubectl apply -k .
+```
+
+## ArgoCD Deployment
+
+Point your ArgoCD Application at the production overlay:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard
+    path: k8s/overlays/production
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+**Secrets handling with ArgoCD** (choose one):
+- **SealedSecrets**: Encrypt `secrets.yaml` with `kubeseal`, commit the `SealedSecret` resource
+- **External Secrets Operator**: Replace `secrets.yaml` with an `ExternalSecret` pointing to Vault/AWS SM
+- **Manual**: Apply `secrets.yaml` with `kubectl` before ArgoCD syncs
+
+## Files requiring customization (.example)
+
+| File | What to change |
+|------|---------------|
+| `secrets.example.yaml` | POSTGRES_PASSWORD, SECRET_KEY, ENCRYPTION_KEY, DATABASE_URL |
+| `ingressroute.example.yaml` | Domain name, TLS certResolver |
+| `resource-limits.example.yaml` | CPU/memory requests and limits per service |
+| `storageclass.example.yaml` | NFS/cloud provisioner (if default StorageClass doesn't support RWX) |
+
+## Architecture
+
+```
+                    ┌─────────┐
+                    │ Traefik │  (HTTPS termination)
+                    └────┬────┘
+                         │ :80
+                    ┌────▼────┐
+                    │   Web   │  (Nginx — static files + reverse proxy)
+                    │ 2 repl. │
+                    └────┬────┘
+                         │ /api/ → :8000
+                    ┌────▼────┐
+                    │   API   │  (FastAPI — business logic)
+                    │ 2 repl. │
+                    └──┬───┬──┘
+                       │   │
+              ┌────────┘   └────────┐
+              ▼                     ▼
+        ┌──────────┐         ┌──────────┐
+        │ Postgres │         │  Redis   │
+        │  (data)  │         │ (queue)  │
+        └──────────┘         └──────────┘
+              ▲                     ▲
+              │                     │
+           ┌──┴─────────────────────┴──┐
+           │         Worker            │
+           │  (scheduled tasks, 1 rep) │
+           └───────────────────────────┘
+```
+
+## Verifying the Deployment
+
+```bash
+# Check all pods are running
+kubectl get pods -n ldapguard
+
+# Check API logs (should show alembic migrations)
+kubectl logs -n ldapguard deployment/api
+
+# Test health endpoint
+curl https://<your-domain>/health
+
+# Test API through nginx proxy
+curl https://<your-domain>/api/auth/login
+
+# Verify HTTP redirects to HTTPS
+curl -I http://<your-domain>/
+```
+
+## Notes
+
+- **Backup volume**: `pvc-backup.yaml` requires `ReadWriteMany` — most default StorageClasses only support `ReadWriteOnce`. Configure an NFS-backed StorageClass if needed (see `storageclass.example.yaml`).
+- **Worker replicas**: Keep at 1. The worker runs APScheduler — multiple replicas would duplicate scheduled jobs.
+- **Database migrations**: The API runs `alembic upgrade head` on startup. Concurrent migrations are safe (Alembic uses PostgreSQL advisory locks).
+- **Service naming**: K8s Service names (`api`, `postgres`, `redis`) match docker-compose, so `nginx.conf` proxy rules work unchanged.
+- **Image versions**: Pin image tags in `overlays/production/kustomization.yaml` via the `images:` block.
