@@ -38,7 +38,12 @@ jobs:
           new="${major}.${minor}.${patch}"
           echo "version=${new}" >> "$GITHUB_OUTPUT"
           echo "tag=v${new}" >> "$GITHUB_OUTPUT"
+          echo "branch=release-${new}" >> "$GITHUB_OUTPUT"
           echo "Bumping ${current} -> ${new}"
+
+      - name: Create release branch
+        run: |
+          git checkout -b ${{ steps.bump.outputs.branch }}
 
       - name: Update VERSION file
         run: echo "${{ steps.bump.outputs.version }}" > VERSION
@@ -53,12 +58,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION k8s/kustomization.yaml
           git commit -m "release: ${{ steps.bump.outputs.tag }}"
-          git push
+          git push origin ${{ steps.bump.outputs.branch }}
 
-      - name: Create and push tag
-        run: |
-          git tag "${{ steps.bump.outputs.tag }}"
-          git push origin "${{ steps.bump.outputs.tag }}"
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.bump.outputs.branch }}
+          title: "Release ${{ steps.bump.outputs.tag }}"
+          body: "Automated version bump and image tag update for ${{ steps.bump.outputs.tag }}."
+          base: main
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
