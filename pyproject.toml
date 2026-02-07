@@ -17,6 +17,13 @@ extend-exclude = '''
 )/
 '''
 
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+# SQLAlchemy Column[X] vs X type mismatches — suppress until models migrate to Mapped[] types
+disable_error_code = ["assignment", "arg-type", "var-annotated", "attr-defined", "operator", "misc", "union-attr"]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q"

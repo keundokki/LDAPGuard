@@ -86,7 +86,8 @@ async def create_ldap_server(
     if not ldap_service.test_connection():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to connect to LDAP server. Please check your credentials and connection settings.",
+            detail="Failed to connect to LDAP server. "
+            "Please check your credentials and connection settings.",
         )
 
     # Encrypt bind password if provided
@@ -183,7 +184,8 @@ async def test_ldap_connection(
 
         return {
             "status": "success",
-            "message": f"Successfully connected to LDAP server. Found {entry_count} entries.",
+            "message": f"Successfully connected to LDAP server. "
+            f"Found {entry_count} entries.",
         }
 
     except Exception as e:

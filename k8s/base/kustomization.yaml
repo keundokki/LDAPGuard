@@ -1,28 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ldapguard
+
 resources:
   - namespace.yaml
-  - configmap-app.yaml
-  - configmap-nginx.yaml
-  - secrets.yaml
+  # Storage
   - pvc-postgres.yaml
   - pvc-redis.yaml
   - pvc-backup.yaml
+  # Database
   - postgres-statefulset.yaml
   - postgres-service.yaml
+  # Cache
   - redis-statefulset.yaml
   - redis-service.yaml
+  # Application
   - api-deployment.yaml
   - api-service.yaml
   - worker-deployment.yaml
   - web-deployment.yaml
   - web-service.yaml
-  - ingressroute.yaml
+  # Config
+  - configmap-app.yaml
+  - configmap-nginx.yaml
+  # Network
   - middleware.yaml
   - networkpolicy.yaml
-  - resource-limits.yaml
-images:
-  - name: ghcr.io/keundokki/ldapguard-api
-    newTag: v1.0.0
-  - name: ghcr.io/keundokki/ldapguard-worker
-    newTag: v1.0.0
-  - name: ghcr.io/keundokki/ldapguard-web
-    newTag: v1.0.0
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize

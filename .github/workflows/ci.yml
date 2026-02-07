@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ldapguard_test
+          POSTGRES_USER: ldapguard
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: pytest tests/ -v --cov=api --cov=workers --cov-report=xml --cov-report=term
+        env:
+          DATABASE_URL: postgresql+asyncpg://ldapguard:testpass@localhost:5432/ldapguard_test
+          REDIS_URL: redis://localhost:6379
+          SECRET_KEY: test-secret-key-minimum-32-characters
+          ENCRYPTION_KEY: test-encryption-key-32-bytes-minimum-aes
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black mypy types-croniter
+
+      - name: flake8
+        run: flake8 api workers --max-line-length=88 --statistics
+
+      - name: black
+        run: black --check api workers
+
+      - name: mypy
+        run: mypy api workers
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: "."
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+  build-test:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile.api
+            image: api
+          - dockerfile: Dockerfile.worker
+            image: worker
+          - dockerfile: Dockerfile.web
+            image: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ldapguard-${{ matrix.image }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
