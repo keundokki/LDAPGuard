@@ -1,0 +1,88 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard.git
+    targetRevision: main  # or specific tag like "v0.0.7"
+    path: helm
+    helm:
+      parameters:
+        # Image versions
+        - name: images.api.tag
+          value: "0.0.7"
+        - name: images.worker.tag
+          value: "0.0.7"
+        - name: images.web.tag
+          value: "0.0.7"
+        
+        # Replica counts
+        - name: api.replicas
+          value: "3"
+        - name: web.replicas
+          value: "3"
+        # worker.replicas: Keep at 1 (scheduled jobs)
+        
+        # Resource limits (production)
+        - name: api.resources.limits.memory
+          value: "1Gi"
+        - name: api.resources.limits.cpu
+          value: "2000m"
+        - name: api.resources.requests.memory
+          value: "512Mi"
+        - name: api.resources.requests.cpu
+          value: "500m"
+        
+        # PostgreSQL storage
+        - name: postgres.storage.size
+          value: "20Gi"
+        - name: postgres.storage.storageClassName
+          value: "fast-ssd"  # CHANGE to your storage class
+        
+        # Redis storage
+        - name: redis.storage.size
+          value: "2Gi"
+        
+        # Backup volume (requires ReadWriteMany storage)
+        - name: backup.enabled
+          value: "true"
+        - name: backup.storage.size
+          value: "100Gi"
+        - name: backup.storage.storageClassName
+          value: "nfs-client"  # CHANGE to your RWX storage class
+        
+        # Ingress configuration
+        - name: ingress.enabled
+          value: "true"
+        - name: ingress.domain
+          value: "ldapguard.yourdomain.com"  # CHANGE THIS
+        - name: ingress.certResolver
+          value: "letsencrypt"
+        
+        # Application configuration
+        - name: config.debug
+          value: "false"
+        - name: config.backupRetentionDays
+          value: "60"
+        - name: config.incrementalBackupEnabled
+          value: "true"
+        - name: config.prometheusEnabled
+          value: "true"
+        - name: config.accessTokenExpireMinutes
+          value: "60"
+        
+        # Network policy
+        - name: networkPolicy.enabled
+          value: "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

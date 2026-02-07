@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard.git
+    targetRevision: main
+    path: helm
+    helm:
+      parameters:
+        # Enable Traefik ingress for HTTPS access
+        - name: ingress.enabled
+          value: "true"
+        
+        # CHANGE THIS to your domain
+        - name: ingress.domain
+          value: "ldapguard.example.com"
+        
+        # TLS certificate resolver (for Let's Encrypt)
+        - name: ingress.certResolver
+          value: "letsencrypt"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

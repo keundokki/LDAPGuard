@@ -1,94 +1,197 @@
 # LDAPGuard — Kubernetes Deployment
 
-Production-ready Kubernetes manifests using Kustomize base/overlays, compatible with ArgoCD and manual `kubectl` deployments.
+Production-ready Kubernetes manifests for deploying LDAPGuard using Kustomize and ArgoCD.
 
-## Directory Structure
+## 🚀 Quick Start
 
-```
-k8s/
-  base/                        # Shared, environment-agnostic resources
-    kustomization.yaml
-    ...deployments, services, configmaps, PVCs, networkpolicy...
-  overlays/
-    production/                # Production-specific: secrets, ingress, image pins
-      kustomization.yaml       # References ../../base + secrets + ingress + patches
-      secrets.example.yaml     # Template — copy to secrets.yaml
-      ingressroute.example.yaml
-      resource-limits.example.yaml
-      storageclass.example.yaml
-```
-
-## Prerequisites
+### Prerequisites
 
 - Kubernetes cluster (1.25+)
 - `kubectl` configured for your cluster
-- Traefik ingress controller installed (with CRD support)
-- Storage provisioner supporting `ReadWriteMany` for shared backup volume (NFS, CephFS, EFS, etc.)
+- (Optional) ArgoCD installed
+- (Optional) Traefik ingress controller for external access
 
-## Quick Start (manual kubectl)
+### Deploy in 2 Steps
+
+**1. Create secrets:**
+```bash
+kubectl create secret generic ldapguard-secrets \
+  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
+  --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:$(openssl rand -base64 24)@postgres:5432/ldapguard" \
+  -n ldapguard --create-namespace
+```
+
+**2. Deploy with kubectl or ArgoCD:**
+
+**Option A - kubectl:**
+```bash
+kubectl apply -k https://github.com/keundokki/LDAPGuard/k8s
+```
+
+**Option B - ArgoCD:**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/keundokki/LDAPGuard/main/k8s/examples/argocd-basic.yaml
+```
+
+That's it! LDAPGuard is now running in your cluster.
+
+## 📁 Directory Structure
+
+```
+k8s/
+├── kustomization.yaml          # Main Kustomize configuration
+├── namespace.yaml              # Namespace definition
+│
+├── deployments/                # Application deployments
+│   ├── api-deployment.yaml
+│   ├── worker-deployment.yaml
+│   └── web-deployment.yaml
+│
+├── statefulsets/               # Stateful services
+│   ├── postgres-statefulset.yaml
+│   └── redis-statefulset.yaml
+│
+├── services/                   # Kubernetes services
+│   ├── api-service.yaml
+│   ├── web-service.yaml
+│   ├── postgres-service.yaml
+│   └── redis-service.yaml
+│
+├── storage/                    # Persistent volume claims
+│   ├── pvc-postgres.yaml       # PostgreSQL data (RWO)
+│   ├── pvc-redis.yaml          # Redis data (RWO)
+│   └── pvc-backup.yaml         # Backup data (RWX - see notes)
+│
+├── config/                     # Configuration
+│   ├── configmap-app.yaml      # Application config
+│   └── configmap-nginx.yaml    # Nginx config
+│
+├── network/                    # Networking policies
+│   ├── middleware.yaml         # Traefik middleware
+│   └── networkpolicy.yaml      # Network policies
+│
+└── examples/                   # Deployment examples & patches
+    ├── README.md               # Detailed examples documentation
+    ├── argocd-basic.yaml       # Basic ArgoCD app
+    ├── argocd-with-versions.yaml  # With version pinning
+    ├── argocd-full.yaml        # Full customization
+    └── patches/
+        ├── ingress.yaml            # Add Traefik ingress
+        ├── resource-limits.yaml    # Add resource limits
+        └── enable-backup-volume.yaml  # Enable RWX backup
+```
+
+## 🎯 Deployment Options
+
+### kubectl (Direct Deployment)
 
 ```bash
-cd k8s/overlays/production/
-
 # 1. Create secrets
-cp secrets.example.yaml secrets.yaml
-# Edit secrets.yaml — generate base64-encoded values:
-#   echo -n 'your-password' | base64
+kubectl create secret generic ldapguard-secrets \
+  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
+  --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard" \
+  -n ldapguard --create-namespace
 
-# 2. Create ingress
-cp ingressroute.example.yaml ingressroute.yaml
-# Edit ingressroute.yaml — set your domain and certResolver
-
-# 3. Create resource limits
-cp resource-limits.example.yaml resource-limits.yaml
-
-# 4. Deploy
-kubectl apply -k .
+# 2. Deploy
+kubectl apply -k https://github.com/keundokki/LDAPGuard/k8s
 ```
 
-## ArgoCD Deployment
+### ArgoCD (GitOps)
 
-Point your ArgoCD Application at the production overlay:
+See detailed examples in [`examples/README.md`](examples/README.md)
 
+**Quick Deploy:**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/keundokki/LDAPGuard/main/k8s/examples/argocd-basic.yaml
+```
+
+## 🔧 Customization
+
+All customization is done via **Kustomize patches** - no need to fork or modify the repo!
+
+### Add Ingress (External Access)
+
+**Option 1 - Use patch file:**
 ```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ldapguard
-  namespace: argocd
+# In your ArgoCD Application
 spec:
   source:
-    repoURL: https://github.com/keundokki/LDAPGuard
-    path: k8s/overlays/production
-    targetRevision: main
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: ldapguard
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    kustomize:
+      patches:
+        - path: examples/patches/ingress.yaml
 ```
 
-**Secrets handling with ArgoCD** (choose one):
-- **SealedSecrets**: Encrypt `secrets.yaml` with `kubeseal`, commit the `SealedSecret` resource
-- **External Secrets Operator**: Replace `secrets.yaml` with an `ExternalSecret` pointing to Vault/AWS SM
-- **Manual**: Apply `secrets.yaml` with `kubectl` before ArgoCD syncs
+Then edit `examples/patches/ingress.yaml` to set your domain.
 
-## Files requiring customization (.example)
+**Option 2 - Inline patch:**
+```yaml
+spec:
+  source:
+    kustomize:
+      patches:
+        - target:
+            kind: IngressRoute
+            name: ldapguard-https
+          patch: |-
+            - op: replace
+              path: /spec/routes/0/match
+              value: Host(`your-domain.com`)
+```
 
-| File | What to change |
-|------|---------------|
-| `secrets.example.yaml` | POSTGRES_PASSWORD, SECRET_KEY, ENCRYPTION_KEY, DATABASE_URL |
-| `ingressroute.example.yaml` | Domain name, TLS certResolver |
-| `resource-limits.example.yaml` | CPU/memory requests and limits per service |
-| `storageclass.example.yaml` | NFS/cloud provisioner (if default StorageClass doesn't support RWX) |
+### Add Resource Limits
 
-## Architecture
+```yaml
+spec:
+  source:
+    kustomize:
+      patches:
+        - path: examples/patches/resource-limits.yaml
+```
+
+### Pin Image Versions
+
+```yaml
+spec:
+  source:
+    kustomize:
+      images:
+        - name: ghcr.io/keundokki/ldapguard-api
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-worker
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-web
+          newTag: "0.0.7"
+```
+
+### Enable Backup Volume (RWX Storage)
+
+**If you have ReadWriteMany storage** (NFS, CephFS, etc.):
+
+**Option 1 - Uncomment in kustomization.yaml:**
+```yaml
+# Edit kustomization.yaml
+resources:
+  - storage/pvc-backup.yaml  # Uncomment this line
+```
+
+**Option 2 - Use patch:**
+```yaml
+spec:
+  source:
+    kustomize:
+      patches:
+        - path: examples/patches/enable-backup-volume.yaml
+```
+
+## 🏗️ Architecture
 
 ```
                     ┌─────────┐
-                    │ Traefik │  (HTTPS termination)
+                    │ Traefik │  (HTTPS termination - optional)
                     └────┬────┘
                          │ :80
                     ┌────▼────┐
@@ -115,29 +218,102 @@ spec:
            └───────────────────────────┘
 ```
 
-## Verifying the Deployment
+## ✅ Verification
 
 ```bash
 # Check all pods are running
 kubectl get pods -n ldapguard
 
-# Check API logs (should show alembic migrations)
+# Check services
+kubectl get svc -n ldapguard
+
+# Check PVCs
+kubectl get pvc -n ldapguard
+
+# View API logs (should show database migrations)
 kubectl logs -n ldapguard deployment/api
 
-# Test health endpoint
-curl https://<your-domain>/health
+# Test internal access
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- curl http://web.ldapguard/health
 
-# Test API through nginx proxy
-curl https://<your-domain>/api/auth/login
-
-# Verify HTTP redirects to HTTPS
-curl -I http://<your-domain>/
+# If ingress is configured, test external access
+curl https://your-domain.com/health
 ```
 
-## Notes
+## 📝 Important Notes
 
-- **Backup volume**: `pvc-backup.yaml` requires `ReadWriteMany` — most default StorageClasses only support `ReadWriteOnce`. Configure an NFS-backed StorageClass if needed (see `storageclass.example.yaml`).
-- **Worker replicas**: Keep at 1. The worker runs APScheduler — multiple replicas would duplicate scheduled jobs.
-- **Database migrations**: The API runs `alembic upgrade head` on startup. Concurrent migrations are safe (Alembic uses PostgreSQL advisory locks).
-- **Service naming**: K8s Service names (`api`, `postgres`, `redis`) match docker-compose, so `nginx.conf` proxy rules work unchanged.
-- **Image versions**: Pin image tags in `overlays/production/kustomization.yaml` via the `images:` block.
+### Storage
+
+- **PostgreSQL & Redis**: Use ReadWriteOnce (RWO) storage - works with any StorageClass
+- **Backup volume**: Requires ReadWriteMany (RWX) storage - commented out by default
+  - Enable only if you have NFS, CephFS, EFS, Azure Files, etc.
+  - See `examples/patches/enable-backup-volume.yaml`
+
+### Replicas
+
+- **API & Web**: Can scale horizontally (2 replicas by default)
+- **Worker**: Keep at 1 replica (APScheduler - multiple replicas would duplicate jobs)
+- **Postgres & Redis**: StatefulSets with 1 replica (scale carefully)
+
+### Database Migrations
+
+- API runs `alembic upgrade head` on startup
+- Safe with multiple API replicas (Alembic uses PostgreSQL advisory locks)
+
+### Secrets Management
+
+This repo intentionally keeps secrets out of Git for security. Options:
+1. **Manual creation** (recommended for quick start)
+2. **Sealed Secrets** (for GitOps)
+3. **External Secrets Operator** (for vault integration)
+4. **ArgoCD Vault Plugin**
+
+### Network Policies
+
+Default NetworkPolicy allows:
+- API ↔ PostgreSQL, Redis
+- Worker ↔ PostgreSQL, Redis
+- Web ↔ API
+- External → Web (if ingress configured)
+
+Adjust `network/networkpolicy.yaml` for stricter policies.
+
+## 🛠️ Troubleshooting
+
+### Pods Pending (Storage Issues)
+
+```bash
+kubectl describe pvc -n ldapguard
+```
+
+**Solution**: Check your StorageClass supports the requested access mode (RWO/RWX)
+
+### Database Connection Errors
+
+Check secret exists and has correct values:
+```bash
+kubectl get secret ldapguard-secrets -n ldapguard -o yaml
+```
+
+### Image Pull Errors
+
+Images are from `ghcr.io/keundokki/ldapguard-*`. If private:
+```bash
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=USERNAME \
+  --docker-password=TOKEN \
+  -n ldapguard
+```
+
+Then patch deployments to use `imagePullSecrets`.
+
+## 📚 Additional Resources
+
+- [ArgoCD Examples](examples/README.md) - Detailed deployment examples
+- [Kustomize Patches](examples/patches/) - Ready-to-use customization patches
+- [Main Documentation](../README.md) - LDAPGuard features and API docs
+
+## 🤝 Contributing
+
+Found an issue or have a suggestion? Open an issue or PR on the [GitHub repository](https://github.com/keundokki/LDAPGuard).

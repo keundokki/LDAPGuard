@@ -1,0 +1,46 @@
+# ArgoCD Application with full customization
+# This example includes:
+# - Custom image versions
+# - Ingress route patch (using examples/patches/ingress.yaml)
+# - Resource limits patch (using examples/patches/resource-limits.yaml)
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard
+    targetRevision: main
+    path: k8s
+    
+    kustomize:
+      # Override image tags
+      images:
+        - name: ghcr.io/keundokki/ldapguard-api
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-worker
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-web
+          newTag: "0.0.7"
+      
+      # Apply patches for customization
+      patches:
+        # Add ingress
+        - path: examples/patches/ingress.yaml
+        # Add resource limits
+        - path: examples/patches/resource-limits.yaml
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

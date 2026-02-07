@@ -1,5 +1,8 @@
-# Kustomize strategic merge patches for resource limits
-# Copy to resource-limits.yaml and adjust values for your cluster
+# Resource limits patches
+# Adds CPU and memory requests/limits to all deployments and statefulsets
+# Adjust values based on your cluster capacity
+
+# PostgreSQL
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -18,6 +21,7 @@ spec:
               memory: "1Gi"
               cpu: "1000m"
 ---
+# Redis
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -36,6 +40,7 @@ spec:
               memory: "256Mi"
               cpu: "500m"
 ---
+# API
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,6 +59,7 @@ spec:
               memory: "512Mi"
               cpu: "1000m"
 ---
+# Worker
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -72,6 +78,7 @@ spec:
               memory: "512Mi"
               cpu: "1000m"
 ---
+# Web
 apiVersion: apps/v1
 kind: Deployment
 metadata:

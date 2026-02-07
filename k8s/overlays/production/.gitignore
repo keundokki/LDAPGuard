@@ -1,6 +1,0 @@
-# Real config files (created from .example templates)
-# These contain secrets or environment-specific values — do not commit
-secrets.yaml
-ingressroute.yaml
-resource-limits.yaml
-storageclass.yaml

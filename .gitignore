@@ -49,6 +49,9 @@ dump.rdb
 *.swo
 *~
 
+# Kubernetes - user-specific customizations (if copying patches locally)
+k8s/patches/custom-*.yaml
+
 # OS
 .DS_Store
 Thumbs.db

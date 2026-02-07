@@ -1,0 +1,36 @@
+# ArgoCD Application with custom image versions
+# Use this to pin specific versions of LDAPGuard images
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard
+    targetRevision: main
+    path: k8s
+    
+    kustomize:
+      # Override image tags for specific versions
+      images:
+        - name: ghcr.io/keundokki/ldapguard-api
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-worker
+          newTag: "0.0.7"
+        - name: ghcr.io/keundokki/ldapguard-web
+          newTag: "0.0.7"
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
