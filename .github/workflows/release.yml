@@ -50,6 +50,11 @@ jobs:
       - name: Update api/__init__.py
         run: |
           sed -i 's/__version__ = ".*"/__version__ = "${{ steps.bump.outputs.new }}"/' api/__init__.py
+ 
+      - name: Update Kustomize image tags
+        run: |
+          sed -i 's/newTag: ".*"/newTag: "${{ steps.bump.outputs.new }}"/' k8s/overlays/production/kustomization.yaml
+
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
