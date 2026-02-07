@@ -250,6 +250,20 @@ jobs:
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "Version: ${VERSION}"
     
+    - name: Check if version tag exists in GHCR
+      id: tag-check
+      run: |
+        VERSION=$(cat VERSION)
+        IMAGE=ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}
+        TAG_EXISTS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          "https://ghcr.io/v2/${{ github.repository_owner }}/${{ matrix.image_name }}/tags/list" | grep -w "\"v$VERSION\"" || true)
+        if [ -n "$TAG_EXISTS" ]; then
+          echo "::set-output name=skip_version_tag::true"
+          echo "Tag v$VERSION already exists for $IMAGE. Will only push :latest."
+        else
+          echo "::set-output name=skip_version_tag::false"
+        fi
+
     - name: Build and push ${{ matrix.image_name }}
       uses: docker/build-push-action@v5
       with:
@@ -259,7 +273,6 @@ jobs:
         platforms: linux/amd64,linux/arm64
         tags: |
           ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:latest
-          ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:${{ steps.version.outputs.version }}
-          ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:${{ github.sha }}
+          ${{ steps.tag-check.outputs.skip_version_tag == 'false' && format('ghcr.io/{0}/{1}:v{2}', github.repository_owner, matrix.image_name, steps.version.outputs.version) || '' }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
