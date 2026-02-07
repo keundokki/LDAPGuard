@@ -2,7 +2,7 @@ resources:
   - namespace.yaml
   - configmap-app.yaml
   - configmap-nginx.yaml
-  - secrets.example.yaml
+  - secrets.yaml
   - pvc-postgres.yaml
   - pvc-redis.yaml
   - pvc-backup.yaml
@@ -15,6 +15,14 @@ resources:
   - worker-deployment.yaml
   - web-deployment.yaml
   - web-service.yaml
-  - ingressroute.example.yaml
+  - ingressroute.yaml
   - middleware.yaml
   - networkpolicy.yaml
+  - resource-limits.yaml
+images:
+  - name: ghcr.io/keundokki/ldapguard-api
+    newTag: v1.0.0
+  - name: ghcr.io/keundokki/ldapguard-worker
+    newTag: v1.0.0
+  - name: ghcr.io/keundokki/ldapguard-web
+    newTag: v1.0.0
