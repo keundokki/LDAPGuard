@@ -1,0 +1,20 @@
+resources:
+  - namespace.yaml
+  - configmap-app.yaml
+  - configmap-nginx.yaml
+  - secrets.example.yaml
+  - pvc-postgres.yaml
+  - pvc-redis.yaml
+  - pvc-backup.yaml
+  - postgres-statefulset.yaml
+  - postgres-service.yaml
+  - redis-statefulset.yaml
+  - redis-service.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - worker-deployment.yaml
+  - web-deployment.yaml
+  - web-service.yaml
+  - ingressroute.example.yaml
+  - middleware.yaml
+  - networkpolicy.yaml

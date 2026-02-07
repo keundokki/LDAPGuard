@@ -1,0 +1,14 @@
+# Example StorageClass for NFS provisioner (ReadWriteMany support)
+# Adjust for your infrastructure: NFS, CephFS, EFS, Azure Files, etc.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ldapguard-nfs
+provisioner: nfs.csi.k8s.io  # Change to your provisioner
+parameters:
+  server: nfs-server.example.com  # Change to your NFS server
+  share: /exports/ldapguard       # Change to your NFS share path
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+mountOptions:
+  - nfsvers=4.1
