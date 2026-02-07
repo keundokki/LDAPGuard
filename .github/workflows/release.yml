@@ -67,6 +67,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION k8s/kustomization.yaml
           git commit -m "release: ${{ steps.bump.outputs.tag }}"
+          git pull --rebase origin ${{ steps.bump.outputs.branch }} || true
           git push --force-with-lease origin ${{ steps.bump.outputs.branch }}
 
       - name: Create Pull Request
