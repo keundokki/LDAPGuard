@@ -18,6 +18,15 @@ jobs:
     permissions:
       contents: write
       packages: write
+    strategy:
+      matrix:
+        include:
+          - dockerfile: Dockerfile.api
+            image_name: ldapguard-api
+          - dockerfile: Dockerfile.worker
+            image_name: ldapguard-worker
+          - dockerfile: Dockerfile.web
+            image_name: ldapguard-web
 
     steps:
       - name: Checkout
@@ -50,7 +59,7 @@ jobs:
 
       - name: Update kustomization.yaml image tag
         run: |
-          sed -i "s/newTag: .*/newTag: \"${{ steps.bump.outputs.tag }}\"/" k8s/kustomization.yaml
+          sed -i "s/newTag: .*/newTag: \"${{ steps.bump.outputs.tag }}\"/g" k8s/kustomization.yaml
 
       - name: Commit version bump
         run: |
@@ -80,17 +89,18 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}
           tags: |
             type=raw,value=${{ steps.bump.outputs.tag }}
             type=semver,pattern={{version}},value=${{ steps.bump.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.bump.outputs.tag }}
             type=raw,value=latest
 
-      - name: Build and push
+      - name: Build and push ${{ matrix.image_name }}
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
