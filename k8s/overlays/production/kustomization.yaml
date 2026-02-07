@@ -11,8 +11,8 @@ patchesStrategicMerge:
 
 images:
   - name: ghcr.io/keundokki/ldapguard-api
-    newTag: "0.0.5"
+    newTag: "0.0.7"
   - name: ghcr.io/keundokki/ldapguard-worker
-    newTag: "0.0.5"
+    newTag: "0.0.7"
   - name: ghcr.io/keundokki/ldapguard-web
-    newTag: "0.0.5"
+    newTag: "0.0.7"
