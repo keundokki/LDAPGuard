@@ -1,0 +1,13 @@
+# Production overlay for LDAPGuard
+# Pins image versions, applies resource limits
+resources:
+  - kustomization.yaml
+patches:
+  - resource-limits.example.yaml
+images:
+  - name: ghcr.io/keundokki/ldapguard-api
+    newTag: v1.0.0
+  - name: ghcr.io/keundokki/ldapguard-worker
+    newTag: v1.0.0
+  - name: ghcr.io/keundokki/ldapguard-web
+    newTag: v1.0.0

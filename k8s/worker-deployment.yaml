@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: ldapguard
+  labels:
+    app.kubernetes.io/name: ldapguard
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ldapguard
+      app.kubernetes.io/component: worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ldapguard
+        app.kubernetes.io/component: worker
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -p 5432 -U ldapguard; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis -p 6379 ping; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+      containers:
+        - name: worker
+          image: ghcr.io/keundokki/ldapguard-worker:latest
+          envFrom:
+            - configMapRef:
+                name: ldapguard-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ldapguard-secrets
+                  key: DATABASE_URL
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ldapguard-secrets
+                  key: ENCRYPTION_KEY
+          volumeMounts:
+            - name: backup-data
+              mountPath: /app/backups
+      volumes:
+        - name: backup-data
+          persistentVolumeClaim:
+            claimName: backup-data

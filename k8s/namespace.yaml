@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ldapguard
+  labels:
+    app.kubernetes.io/name: ldapguard
+    app.kubernetes.io/part-of: ldapguard

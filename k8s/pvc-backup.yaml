@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-data
+  namespace: ldapguard
+  labels:
+    app.kubernetes.io/name: ldapguard
+    app.kubernetes.io/component: backup
+spec:
+  # ReadWriteMany required: shared between API and Worker pods
+  # Needs a storage backend that supports RWX (NFS, CephFS, EFS, Azure Files, etc.)
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
