@@ -5,6 +5,11 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (branch, tag, or commit)'
+        required: false
+        default: 'main'
 
 concurrency:
   group: publish-${{ github.ref }}
