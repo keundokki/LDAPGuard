@@ -9,6 +9,7 @@ metadata:
 spec:
   # ReadWriteMany required: shared between API and Worker pods
   # Needs a storage backend that supports RWX (NFS, CephFS, EFS, Azure Files, etc.)
+  storageClassName: nfs-rwx
   accessModes:
     - ReadWriteMany
   resources:
