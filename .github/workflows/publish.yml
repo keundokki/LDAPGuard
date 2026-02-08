@@ -32,6 +32,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read version
         id: version
@@ -56,8 +58,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if version tag exists
+        id: check-tag
+        if: steps.version.outputs.git_tag != ''
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}"
+          TAG="${{ steps.version.outputs.version }}"
+          if docker manifest inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE}:${TAG} already exists, skipping build"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE}:${TAG} does not exist, proceeding with build"
+          fi
+
       - name: Extract Docker metadata
         id: meta
+        if: steps.check-tag.outputs.exists != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
@@ -67,6 +84,7 @@ jobs:
             type=raw,value=sha-${{ steps.version.outputs.sha_short }}
 
       - name: Build and push
+        if: steps.check-tag.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -84,6 +102,8 @@ jobs:
     needs: publish
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read version
         id: version
