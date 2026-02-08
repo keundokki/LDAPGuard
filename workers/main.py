@@ -124,6 +124,7 @@ class WorkerService:
             # Get a valid user to attribute the backup to
             # For automatic scheduled backups, we use the first available user
             from api.models.models import User
+
             logger.info("Querying for available users")
             result = await db.execute(select(User))
             user = result.scalars().first()

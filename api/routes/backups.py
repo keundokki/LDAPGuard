@@ -199,7 +199,7 @@ async def download_backup_content(
     return StreamingResponse(
         io.BytesIO(raw_data),
         media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

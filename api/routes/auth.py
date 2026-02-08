@@ -132,14 +132,10 @@ async def admin_create_user(
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def bootstrap_admin(
-    user_data: UserCreate, db: AsyncSession = Depends(get_db)
-):
+async def bootstrap_admin(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Bootstrap first admin user. Only works if no admin users exist."""
     # Check if any admin users exist
-    result = await db.execute(
-        select(User).where(User.role == UserRole.ADMIN)
-    )
+    result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
     admin_exists = result.scalar_one_or_none()
 
     if admin_exists:
