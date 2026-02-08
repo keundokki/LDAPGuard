@@ -36,8 +36,10 @@ jobs:
         run: |
           VERSION=$(cat VERSION | tr -d '[:space:]')
           SHA_SHORT=$(git rev-parse --short HEAD)
+          GIT_TAG=$(git describe --exact-match --tags 2>/dev/null || echo "")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -59,7 +61,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.git_tag != '' }}
             type=raw,value=sha-${{ steps.version.outputs.sha_short }}
 
       - name: Build and push

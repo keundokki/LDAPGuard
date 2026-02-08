@@ -65,5 +65,7 @@ jobs:
           body: |
             Automated version bump: `${{ steps.bump.outputs.old }}` → `${{ steps.bump.outputs.new }}`
 
-            Once merged, the publish workflow will build and push images tagged `${{ steps.bump.outputs.new }}`.
+            When this PR is merged, the following will happen automatically:
+            1. Git tag `v${{ steps.bump.outputs.new }}` will be created
+            2. Publish workflow will build and push Docker images with the stable version tag
           labels: release
