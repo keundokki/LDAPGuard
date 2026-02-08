@@ -1,44 +1,58 @@
 # Example IngressRoute for Traefik + Cloudflare Origin Certificate
 #
-# Usage (local apply):
-#   kubectl apply -f k8s/examples/ldapguard-ingress.example.yaml
+# Usage:
+#   1. Copy this file: cp k8s/examples/ldapguard-ingress.example.yaml k8s/examples/ldapguard-ingress.yaml
+#   2. Replace ldapguard.example.com with your actual domain
+#   3. Create Cloudflare Origin Certificate secret (see docs/CLOUDFLARE_SSL.md)
+#   4. Apply: kubectl apply -f k8s/examples/ldapguard-ingress.yaml
 #
-# Replace:
-# - ldapguard.example.com with your domain
-# - cloudflare-origin-cert with your TLS secret name
+# Note: The middlewares (security-headers, rate-limit-global, compress) must exist in the traefik namespace
 
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: ldapguard-https
   namespace: ldapguard
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  labels:
+    app: ldapguard
+    version: "1.0"
 spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`ldapguard.example.com`)
-      kind: Rule
-      services:
-        - name: web
-          port: 80
-      middlewares:
-        - name: ldapguard-security-headers
+  - match: Host(`ldapguard.example.com`)
+    kind: Rule
+    services:
+    - name: web
+      port: 80
+    middlewares:
+    - name: security-headers
+      namespace: traefik
+    - name: rate-limit-global
+      namespace: traefik
+    - name: compress
+      namespace: traefik
   tls:
     secretName: cloudflare-origin-cert
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: ldapguard-http-redirect
+  name: ldapguard-http
   namespace: ldapguard
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  labels:
+    app: ldapguard
+    version: "1.0"
 spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`ldapguard.example.com`)
-      kind: Rule
-      services:
-        - name: web
-          port: 80
-      middlewares:
-        - name: ldapguard-https-redirect
+  - match: Host(`ldapguard.example.com`)
+    kind: Rule
+    services:
+    - name: web
+      port: 80
