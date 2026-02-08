@@ -4,7 +4,7 @@
 let currentAdminSection = 'users';
 
 // Show admin section
-function showAdminSection(section) {
+function showAdminSection(section, evt = null) {
     currentAdminSection = section;
     
     // Hide all admin sections
@@ -19,7 +19,14 @@ function showAdminSection(section) {
     document.querySelectorAll('.admin-nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    event.target.classList.add('active');
+    if (evt && evt.target) {
+        evt.target.classList.add('active');
+    } else {
+        const fallback = document.querySelector(`.admin-nav-btn[data-section="${section}"]`);
+        if (fallback) {
+            fallback.classList.add('active');
+        }
+    }
     
     // Load data for the section
     switch(section) {
@@ -447,6 +454,7 @@ async function loadUsers() {
                 <td>${new Date(user.created_at).toLocaleString()}</td>
                 <td>
                     <button class="btn btn-primary btn-sm" onclick="showEditUserModal(${parseInt(user.id)})">Edit</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showResetPasswordModal(${parseInt(user.id)})">Reset Password</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteUser(${parseInt(user.id)})">Delete</button>
                 </td>
             </tr>
@@ -479,7 +487,7 @@ async function handleCreateUser(event) {
     const role = document.getElementById('newRole').value;
     
     try {
-        const response = await fetch('/api/auth/register', {
+        const response = await fetch('/api/auth/users/', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${getAuthToken()}`,
@@ -494,12 +502,21 @@ async function handleCreateUser(event) {
                 ldap_auth: false
             })
         });
-        
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create user');
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to create user');
+            throw new Error(message);
         }
-        
+
         showToast('success', 'User created successfully');
         closeCreateUserModal();
         await loadUsers();
@@ -548,6 +565,92 @@ async function showEditUserModal(userId) {
 function closeEditUserModal() {
     document.getElementById('editUserModal').style.display = 'none';
     document.getElementById('editUserForm').reset();
+}
+
+// Show reset password modal
+async function showResetPasswordModal(userId) {
+    try {
+        const response = await fetch('/api/auth/users/', {
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to load user details');
+        }
+
+        const users = await response.json();
+        const user = users.find(u => u.id === userId);
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        document.getElementById('resetUserId').value = user.id;
+        document.getElementById('resetUsername').value = user.username;
+        document.getElementById('resetNewPassword').value = '';
+        document.getElementById('resetConfirmPassword').value = '';
+
+        document.getElementById('resetPasswordModal').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading user details:', error);
+        showToast('error', error.message || 'Failed to load user details');
+    }
+}
+
+// Close reset password modal
+function closeResetPasswordModal() {
+    document.getElementById('resetPasswordModal').style.display = 'none';
+    document.getElementById('resetPasswordForm').reset();
+}
+
+// Handle reset password
+async function handleResetPassword(event) {
+    event.preventDefault();
+
+    const userId = document.getElementById('resetUserId').value;
+    const newPassword = document.getElementById('resetNewPassword').value;
+    const confirmPassword = document.getElementById('resetConfirmPassword').value;
+
+    if (!newPassword || !confirmPassword) {
+        showToast('error', 'Please fill in both password fields');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('error', 'Passwords do not match');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/auth/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ new_password: newPassword })
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to reset password');
+            throw new Error(message);
+        }
+
+        showToast('success', 'Password reset successfully');
+        closeResetPasswordModal();
+    } catch (error) {
+        console.error('Reset password error:', error);
+        showToast('error', error.message || 'Failed to reset password');
+    }
 }
 
 // Handle edit user

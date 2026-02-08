@@ -56,9 +56,16 @@ async def get_scheduled_backup(schedule_id: int, db: AsyncSession = Depends(get_
 async def create_scheduled_backup(
     schedule_data: ScheduledBackupCreate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Create a new scheduled backup."""
+    # Only admins and operators can create scheduled backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can create scheduled backups",
+        )
+
     if not croniter.is_valid(schedule_data.cron_expression):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -87,9 +94,16 @@ async def update_scheduled_backup(
     schedule_id: int,
     schedule_data: ScheduledBackupUpdate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Update scheduled backup."""
+    # Only admins and operators can update scheduled backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can update scheduled backups",
+        )
+
     if schedule_data.cron_expression and not croniter.is_valid(
         schedule_data.cron_expression
     ):
@@ -121,9 +135,16 @@ async def update_scheduled_backup(
 async def delete_scheduled_backup(
     schedule_id: int,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Delete scheduled backup."""
+    # Only admins and operators can delete scheduled backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can delete scheduled backups",
+        )
+
     result = await db.execute(
         select(ScheduledBackup).where(ScheduledBackup.id == schedule_id)
     )

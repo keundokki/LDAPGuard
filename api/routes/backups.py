@@ -80,6 +80,13 @@ async def create_backup(
     current_user=Depends(get_current_user),
 ):
     """Create a new backup job."""
+    # Only admins and operators can create backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can create backups",
+        )
+
     # Verify LDAP server exists
     result = await db.execute(
         select(LDAPServer).where(LDAPServer.id == backup_data.ldap_server_id)
@@ -115,9 +122,16 @@ async def create_backup(
 async def delete_backup(
     backup_id: int,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Delete a backup."""
+    # Only admins and operators can delete backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can delete backups",
+        )
+
     result = await db.execute(select(Backup).where(Backup.id == backup_id))
     backup = result.scalar_one_or_none()
 
@@ -147,9 +161,16 @@ async def delete_backup(
 async def batch_delete_backups(
     request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Delete multiple backups at once."""
+    # Only admins and operators can delete backups
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can delete backups",
+        )
+
     if not request.backup_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No backup IDs provided"

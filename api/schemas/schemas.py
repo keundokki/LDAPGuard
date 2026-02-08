@@ -43,6 +43,15 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class AdminResetPassword(BaseModel):
+    new_password: str
+
+
 class UserResponse(UserBase):
     id: int
     is_active: bool

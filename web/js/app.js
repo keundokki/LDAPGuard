@@ -24,6 +24,61 @@ function authHeaders() {
     };
 }
 
+function setAdminVisibility(isAdmin) {
+    console.log('setAdminVisibility called with:', isAdmin);
+    const adminTab = document.querySelector('.nav-tab[data-tab="admin"]');
+    const adminSection = document.getElementById('admin');
+    
+    console.log('Admin tab element:', adminTab);
+    console.log('Admin section element:', adminSection);
+
+    if (adminTab) {
+        adminTab.style.display = isAdmin ? '' : 'none';
+        console.log('Admin tab display set to:', adminTab.style.display);
+    }
+
+    if (adminSection) {
+        adminSection.style.display = isAdmin ? '' : 'none';
+        console.log('Admin section display set to:', adminSection.style.display);
+    }
+
+    if (!isAdmin) {
+        const activeTab = document.querySelector('.nav-tab.active');
+        if (activeTab && activeTab.getAttribute('data-tab') === 'admin') {
+            const dashboardTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
+            if (dashboardTab) {
+                dashboardTab.click();
+            }
+        }
+    }
+}
+
+// Control operator-level actions visibility
+function setOperatorVisibility(isOperator) {
+    // Operator action buttons
+    const operatorButtons = [
+        'addServerBtn',
+        'createBackupBtn',
+        'createRestoreBtn',
+        'scheduleBackupBtn',
+        'batchDeleteBtn'
+    ];
+
+    operatorButtons.forEach(buttonId => {
+        const btn = document.getElementById(buttonId);
+        if (btn) {
+            btn.style.display = isOperator ? '' : 'none';
+        }
+    });
+
+    if (!isOperator) {
+        // Disable action columns in tables (edit/delete buttons)
+        document.querySelectorAll('.action-cell').forEach(cell => {
+            cell.style.display = 'none';
+        });
+    }
+}
+
 // Check authentication and initialize app
 async function checkAuthAndInit() {
     const token = getAuthToken();
@@ -31,6 +86,7 @@ async function checkAuthAndInit() {
     if (!token) {
         // Show login modal
         document.getElementById('loginModal').style.display = 'block';
+        setAdminVisibility(false);
         return;
     }
     
@@ -42,14 +98,23 @@ async function checkAuthAndInit() {
         
         if (response.ok) {
             const user = await response.json();
+            console.log('User from /auth/me:', user);
+            console.log('User role:', user.role);
+            console.log('User role type:', typeof user.role);
+            console.log('Is admin check:', user.role === 'admin');
             // Show main app
             document.getElementById('mainApp').style.display = 'block';
             document.getElementById('loginModal').style.display = 'none';
             
             // Update auth status
             document.getElementById('auth-status').textContent = `${user.username} (${user.role})`;
+            document.getElementById('login-button').style.display = 'none';
             document.getElementById('login-button').textContent = 'Logout';
             document.getElementById('login-button').onclick = handleLogout;
+
+            console.log('Calling setAdminVisibility with:', user.role === 'admin');
+            setAdminVisibility(user.role === 'admin');
+            setOperatorVisibility(user.role === 'admin' || user.role === 'operator');
             
             // Initialize theme
             initTheme();
@@ -60,11 +125,15 @@ async function checkAuthAndInit() {
             // Token invalid, show login
             clearAuthToken();
             document.getElementById('loginModal').style.display = 'block';
+            setAdminVisibility(false);
+            setOperatorVisibility(false);
         }
     } catch (error) {
         console.error('Auth check failed:', error);
         clearAuthToken();
         document.getElementById('loginModal').style.display = 'block';
+        setAdminVisibility(false);
+        setOperatorVisibility(false);
     }
 }
 
@@ -83,14 +152,29 @@ async function handleLogin(event) {
             },
             body: JSON.stringify({ username, password })
         });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Login failed');
+
+        const contentType = response.headers.get('content-type') || '';
+        let payload;
+        if (contentType.includes('application/json')) {
+            payload = await response.json();
+        } else {
+            payload = await response.text();
         }
-        
-        const data = await response.json();
-        setAuthToken(data.access_token);
+
+        if (!response.ok) {
+            const message = payload && payload.detail
+                ? payload.detail
+                : (typeof payload === 'string' && payload.length > 0
+                    ? payload
+                    : 'Login failed');
+            throw new Error(message);
+        }
+
+        if (!payload || !payload.access_token) {
+            throw new Error('Login failed');
+        }
+
+        setAuthToken(payload.access_token);
         
         // Hide login modal and show app
         document.getElementById('loginModal').style.display = 'none';
@@ -108,8 +192,11 @@ function handleLogout() {
     document.getElementById('loginModal').style.display = 'block';
     document.getElementById('auth-status').textContent = 'Not signed in';
     document.getElementById('login-button').textContent = 'Login';
+    document.getElementById('login-button').style.display = 'inline-block';
     document.getElementById('login-button').onclick = showLoginModal;
     document.getElementById('loginForm').reset();
+    setAdminVisibility(false);
+    setOperatorVisibility(false);
 }
 
 // Show login modal
@@ -124,6 +211,102 @@ function closeLoginModal() {
         return;
     }
     document.getElementById('loginModal').style.display = 'none';
+}
+
+// Toggle user menu dropdown
+function toggleUserMenu() {
+    const menu = document.getElementById('userMenu');
+    if (menu) {
+        menu.classList.toggle('active');
+    }
+}
+
+// Hide user menu when clicking elsewhere
+document.addEventListener('click', function(event) {
+    const userMenu = document.getElementById('userMenu');
+    const authStatus = document.getElementById('auth-status');
+    if (userMenu && !event.target.closest('.user-menu-container')) {
+        userMenu.classList.remove('active');
+    }
+});
+
+// Show change password modal
+function showChangePasswordModal() {
+    const menu = document.getElementById('userMenu');
+    if (menu) {
+        menu.classList.remove('active');
+    }
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+// Close change password modal
+function closeChangePasswordModal() {
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const form = document.getElementById('changePasswordForm');
+    if (form) {
+        form.reset();
+    }
+}
+
+// Handle change password form submission
+async function handleChangePassword(event) {
+    event.preventDefault();
+    
+    const currentPassword = document.getElementById('changeCurrentPassword').value;
+    const newPassword = document.getElementById('changeNewPassword').value;
+    const confirmPassword = document.getElementById('changeConfirmPassword').value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        showToast('error', 'Please fill in all password fields');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('error', 'New passwords do not match');
+        return;
+    }
+
+    if (newPassword.length < 8) {
+        showToast('error', 'New password must be at least 8 characters');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/auth/change-password`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+                old_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to change password');
+            throw new Error(message);
+        }
+
+        closeChangePasswordModal();
+        showToast('success', 'Password changed successfully');
+    } catch (error) {
+        console.error('Change password error:', error);
+        showToast('error', error.message || 'Failed to change password');
+    }
 }
 
 // Toast notifications
@@ -203,6 +386,11 @@ function loadTabData(tab) {
         case 'scheduled':
             loadScheduled();
             break;
+        case 'admin':
+            if (typeof loadUsers === 'function') {
+                loadUsers();
+            }
+            break;
     }
 }
 
@@ -267,13 +455,73 @@ async function loadServers() {
                         ${server.is_active ? 'Active' : 'Inactive'}
                     </span>
                 </td>
-                <td>
+                <td class="action-cell">
                     <button class="btn btn-primary" onclick="backupServer(${parseInt(server.id)})">Backup Now</button>
                 </td>
             </tr>
         `).join('');
     } catch (error) {
         console.error('Error loading servers:', error);
+    }
+}
+
+async function loadServerOptions(selectId, selectedId = null) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers/`, {
+            headers: authHeaders()
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load servers: ${response.status} ${response.statusText}`);
+        }
+
+        const servers = await response.json();
+
+        if (servers.length === 0) {
+            select.innerHTML = '<option value="">No servers available</option>';
+            return;
+        }
+
+        select.innerHTML = servers.map(server => {
+            const isSelected = selectedId && parseInt(server.id) === parseInt(selectedId);
+            return `<option value="${parseInt(server.id)}"${isSelected ? ' selected' : ''}>${escapeHtml(server.name)}</option>`;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading server options:', error);
+        select.innerHTML = '<option value="">Failed to load servers</option>';
+    }
+}
+
+async function loadBackupOptions(selectId, selectedId = null) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    try {
+        const response = await fetch(`${API_URL}/backups/?status=completed`, {
+            headers: authHeaders()
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load backups: ${response.status} ${response.statusText}`);
+        }
+
+        const backups = await response.json();
+
+        if (backups.length === 0) {
+            select.innerHTML = '<option value="">No completed backups available</option>';
+            return;
+        }
+
+        select.innerHTML = backups.map(backup => {
+            const id = parseInt(backup.id);
+            const label = `#${id} - Server ${parseInt(backup.ldap_server_id)} (${backup.backup_type})`;
+            const isSelected = selectedId && id === parseInt(selectedId);
+            return `<option value="${id}"${isSelected ? ' selected' : ''}>${label}</option>`;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading backup options:', error);
+        select.innerHTML = '<option value="">Failed to load backups</option>';
     }
 }
 
@@ -309,7 +557,7 @@ async function loadBackups() {
                 <td>${backup.file_size ? formatBytes(backup.file_size) : 'N/A'}</td>
                 <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
                 <td>${new Date(backup.created_at).toLocaleString()}</td>
-                <td>
+                <td class="action-cell">
                     ${backup.status === 'completed' ? 
                         `<button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
                         ''}
@@ -352,7 +600,7 @@ async function loadRestores() {
                 </td>
                 <td>${restore.entries_restored ? parseInt(restore.entries_restored) : 'N/A'}</td>
                 <td>${new Date(restore.created_at).toLocaleString()}</td>
-                <td>-</td>
+                <td class="action-cell">-</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -362,8 +610,40 @@ async function loadRestores() {
 
 // Load scheduled backups
 async function loadScheduled() {
-    // Placeholder - would need scheduled backups endpoint
-    console.log('Loading scheduled backups...');
+    try {
+        const response = await fetch(`${API_URL}/scheduled-backups/`, {
+            headers: authHeaders()
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load scheduled backups: ${response.status} ${response.statusText}`);
+        }
+
+        const scheduled = await response.json();
+        const tbody = document.getElementById('scheduled-tbody');
+
+        if (scheduled.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No scheduled backups</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = scheduled.map(schedule => `
+            <tr>
+                <td>${escapeHtml(schedule.name)}</td>
+                <td>Server #${parseInt(schedule.ldap_server_id)}</td>
+                <td>${escapeHtml(schedule.cron_expression)}</td>
+                <td>${escapeHtml(schedule.backup_type)}</td>
+                <td>${parseInt(schedule.retention_days)}</td>
+                <td>
+                    <span class="status-badge ${schedule.is_active ? 'status-completed' : 'status-failed'}">
+                        ${schedule.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td class="action-cell">-</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading scheduled backups:', error);
+    }
 }
 
 // Helper functions
@@ -376,27 +656,332 @@ function formatBytes(bytes) {
 }
 
 function showAddServerModal() {
-    alert('Add Server modal - to be implemented');
+    const modal = document.getElementById('addServerModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+function closeAddServerModal() {
+    const modal = document.getElementById('addServerModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const form = document.getElementById('addServerForm');
+    if (form) {
+        form.reset();
+    }
+}
+
+function updatePort(checkbox) {
+    const portInput = document.getElementById('serverPort');
+    if (!portInput) return;
+
+    if (checkbox.checked && (portInput.value === '' || portInput.value === '389')) {
+        portInput.value = '636';
+    } else if (!checkbox.checked && (portInput.value === '' || portInput.value === '636')) {
+        portInput.value = '389';
+    }
+}
+
+async function handleAddServer(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('serverName').value.trim();
+    const host = document.getElementById('serverHost').value.trim();
+    const port = document.getElementById('serverPort').value;
+    const use_ssl = document.getElementById('serverSSL').checked;
+    const base_dn = document.getElementById('serverBaseDN').value.trim();
+    const bind_dn = document.getElementById('serverBindDN').value.trim() || null;
+    const bind_password = document.getElementById('serverBindPassword').value || null;
+
+    if (!name || !host || !port || !base_dn) {
+        showToast('error', 'Please fill in required fields (Name, Host, Port, Base DN)');
+        return;
+    }
+
+    const payload = {
+        name,
+        host,
+        port: parseInt(port),
+        use_ssl,
+        base_dn,
+        bind_dn,
+        bind_password,
+        is_active: true
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers/`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to add LDAP server');
+            throw new Error(message);
+        }
+
+        showToast('success', 'LDAP server added successfully');
+        closeAddServerModal();
+        await loadServers();
+    } catch (error) {
+        console.error('Add server error:', error);
+        showToast('error', error.message || 'Failed to add LDAP server');
+    }
 }
 
 function showCreateBackupModal() {
-    alert('Create Backup modal - to be implemented');
+    const modal = document.getElementById('createBackupModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    loadServerOptions('backupServerId');
+}
+
+function closeCreateBackupModal() {
+    const modal = document.getElementById('createBackupModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const form = document.getElementById('createBackupForm');
+    if (form) {
+        form.reset();
+    }
+}
+
+async function handleCreateBackup(event) {
+    event.preventDefault();
+
+    const serverId = document.getElementById('backupServerId').value;
+    const backupType = document.getElementById('backupType').value;
+    const encrypted = document.getElementById('backupEncrypted').checked;
+    const compressionEnabled = document.getElementById('backupCompression').checked;
+
+    if (!serverId) {
+        showToast('error', 'Please select an LDAP server');
+        return;
+    }
+
+    const payload = {
+        ldap_server_id: parseInt(serverId),
+        backup_type: backupType,
+        encrypted,
+        compression_enabled: compressionEnabled
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/backups/`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to create backup');
+            throw new Error(message);
+        }
+
+        showToast('success', 'Backup created successfully');
+        closeCreateBackupModal();
+        await loadBackups();
+    } catch (error) {
+        console.error('Create backup error:', error);
+        showToast('error', error.message || 'Failed to create backup');
+    }
 }
 
 function showCreateRestoreModal() {
-    alert('Create Restore modal - to be implemented');
+    const modal = document.getElementById('createRestoreModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    loadBackupOptions('restoreBackupId');
+    loadServerOptions('restoreServerId');
+}
+
+function closeCreateRestoreModal() {
+    const modal = document.getElementById('createRestoreModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const form = document.getElementById('createRestoreForm');
+    if (form) {
+        form.reset();
+    }
+    toggleRestoreFilter();
+}
+
+function toggleRestoreFilter() {
+    const filterGroup = document.getElementById('restoreFilterGroup');
+    const selective = document.getElementById('restoreSelective');
+    if (!filterGroup || !selective) return;
+
+    filterGroup.style.display = selective.checked ? 'block' : 'none';
+}
+
+async function handleCreateRestore(event) {
+    event.preventDefault();
+
+    const backupId = document.getElementById('restoreBackupId').value;
+    const serverId = document.getElementById('restoreServerId').value;
+    const selectiveRestore = document.getElementById('restoreSelective').checked;
+    const restoreFilter = document.getElementById('restoreFilter').value.trim();
+    const pointInTime = document.getElementById('restorePointInTime').value;
+
+    if (!backupId || !serverId) {
+        showToast('error', 'Please select a backup and a target server');
+        return;
+    }
+
+    if (selectiveRestore && !restoreFilter) {
+        showToast('error', 'Please provide an LDAP filter for selective restore');
+        return;
+    }
+
+    const payload = {
+        backup_id: parseInt(backupId),
+        ldap_server_id: parseInt(serverId),
+        selective_restore: selectiveRestore,
+        restore_filter: selectiveRestore ? restoreFilter : null,
+        point_in_time: pointInTime || null
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/restores/`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to create restore job');
+            throw new Error(message);
+        }
+
+        showToast('success', 'Restore job created successfully');
+        closeCreateRestoreModal();
+        await loadRestores();
+    } catch (error) {
+        console.error('Create restore error:', error);
+        showToast('error', error.message || 'Failed to create restore job');
+    }
 }
 
 function showScheduleModal() {
-    alert('Schedule Backup modal - to be implemented');
+    const modal = document.getElementById('createScheduleModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    loadServerOptions('scheduleServerId');
+}
+
+function closeCreateScheduleModal() {
+    const modal = document.getElementById('createScheduleModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const form = document.getElementById('createScheduleForm');
+    if (form) {
+        form.reset();
+    }
+}
+
+async function handleCreateSchedule(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('scheduleName').value.trim();
+    const serverId = document.getElementById('scheduleServerId').value;
+    const backupType = document.getElementById('scheduleType').value;
+    const cronExpression = document.getElementById('scheduleCron').value.trim();
+    const retention = document.getElementById('scheduleRetention').value;
+
+    if (!name || !serverId || !cronExpression) {
+        showToast('error', 'Please fill in required fields (Name, Server, Cron)');
+        return;
+    }
+
+    const payload = {
+        name,
+        ldap_server_id: parseInt(serverId),
+        backup_type: backupType,
+        cron_expression: cronExpression,
+        retention_days: parseInt(retention || '30')
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/scheduled-backups/`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to create schedule');
+            throw new Error(message);
+        }
+
+        showToast('success', 'Schedule created successfully');
+        closeCreateScheduleModal();
+        await loadScheduled();
+    } catch (error) {
+        console.error('Create schedule error:', error);
+        showToast('error', error.message || 'Failed to create schedule');
+    }
 }
 
 function backupServer(serverId) {
-    alert(`Backup server ${serverId} - to be implemented`);
+    const modal = document.getElementById('createBackupModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    loadServerOptions('backupServerId', serverId);
 }
 
 function restoreBackup(backupId) {
-    alert(`Restore backup ${backupId} - to be implemented`);
+    const modal = document.getElementById('createRestoreModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    loadBackupOptions('restoreBackupId', backupId);
+    loadServerOptions('restoreServerId');
 }
 
 // Fetch and display app version

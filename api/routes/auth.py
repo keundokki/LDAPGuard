@@ -14,8 +14,10 @@ from api.core.security import (
     get_password_hash,
     verify_password,
 )
-from api.models.models import User
+from api.models.models import User, UserRole
 from api.schemas.schemas import (
+    AdminResetPassword,
+    ChangePassword,
     LoginRequest,
     Token,
     UserCreate,
@@ -30,11 +32,11 @@ limiter = Limiter(key_func=get_remote_address)
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-@limiter.limit("3/hour")
+@limiter.limit("30/minute")
 async def register(
     request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)
 ):
-    """Register a new user. Rate limited to 3 registrations per hour."""
+    """Register a new user. Rate limited to 30 registrations per minute."""
     # Check if username exists
     result = await db.execute(select(User).where(User.username == user_data.username))
     existing_user = result.scalar_one_or_none()
@@ -54,14 +56,14 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
 
-    # Create user
+    # Create user (always as viewer, cannot specify role)
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         username=user_data.username,
         email=user_data.email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
-        role=user_data.role,
+        role=UserRole.VIEWER,  # Always create as viewer for security
         ldap_auth=user_data.ldap_auth,
     )
 
@@ -70,6 +72,109 @@ async def register(
     await db.refresh(new_user)
 
     return new_user
+
+
+@router.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_user(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin-only user creation (no rate limit)."""
+    if current_user.role.value != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create users",
+        )
+
+    # Check if username exists
+    result = await db.execute(select(User).where(User.username == user_data.username))
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered",
+        )
+
+    # Check if email exists
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    existing_email = result.scalar_one_or_none()
+
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
+
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name,
+        role=user_data.role or UserRole.VIEWER,
+        ldap_auth=user_data.ldap_auth,
+    )
+
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+
+    return new_user
+
+
+@router.post("/bootstrap", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def bootstrap_admin(
+    user_data: UserCreate, db: AsyncSession = Depends(get_db)
+):
+    """Bootstrap first admin user. Only works if no admin users exist."""
+    # Check if any admin users exist
+    result = await db.execute(
+        select(User).where(User.role == UserRole.ADMIN)
+    )
+    admin_exists = result.scalar_one_or_none()
+
+    if admin_exists:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin user already exists. Use /auth/register for regular users.",
+        )
+
+    # Check if username exists
+    result = await db.execute(select(User).where(User.username == user_data.username))
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered",
+        )
+
+    # Check if email exists
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    existing_email = result.scalar_one_or_none()
+
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
+
+    # Create first admin user
+    hashed_password = get_password_hash(user_data.password)
+    admin_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name,
+        role=UserRole.ADMIN,
+        ldap_auth=user_data.ldap_auth,
+    )
+
+    db.add(admin_user)
+    await db.commit()
+    await db.refresh(admin_user)
+
+    return admin_user
 
 
 @router.post("/login", response_model=Token)
@@ -108,6 +213,31 @@ async def login(
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current authenticated user information."""
     return current_user
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+async def change_password(
+    password_data: ChangePassword,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Change current user's password."""
+    # Verify old password
+    if not verify_password(password_data.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    # Hash new password
+    new_hashed = get_password_hash(password_data.new_password)
+
+    # Update password in database
+    current_user.hashed_password = new_hashed
+    db.add(current_user)
+    await db.commit()
+
+    return {"message": "Password changed successfully"}
 
 
 @router.get("/users/", response_model=list[UserResponse])
@@ -188,6 +318,36 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.post("/users/{user_id}/reset-password", status_code=status.HTTP_200_OK)
+async def admin_reset_password(
+    user_id: int,
+    password_data: AdminResetPassword,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin-only password reset for a user."""
+    if current_user.role.value != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can reset passwords",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    new_hashed = get_password_hash(password_data.new_password)
+    user.hashed_password = new_hashed
+    db.add(user)
+    await db.commit()
+
+    return {"message": "Password reset successfully"}
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

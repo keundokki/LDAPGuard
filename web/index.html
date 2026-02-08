@@ -17,9 +17,14 @@
                 </div>
                 <div class="header-actions">
                     <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-                    <span id="auth-status" class="auth-status">Not signed in</span>
+                    <div class="user-menu-container">
+                        <span id="auth-status" class="auth-status" onclick="toggleUserMenu()" style="cursor: pointer;">Not signed in</span>
+                        <div id="userMenu" class="user-menu-dropdown">
+                            <button class="user-menu-item" onclick="showChangePasswordModal()">🔐 Change Password</button>
+                            <button class="user-menu-item" onclick="handleLogout()">🚪 Logout</button>
+                        </div>
+                    </div>
                     <button class="btn btn-secondary" id="login-button" onclick="showLoginModal()">Login</button>
-                    <button class="btn btn-danger" id="logout-button" onclick="handleLogout()" style="display: none;">Logout</button>
                 </div>
             </div>
         </header>
@@ -66,7 +71,7 @@
             <div id="servers" class="tab-content">
                 <div class="section-header">
                     <h2>LDAP Servers</h2>
-                    <button class="btn btn-primary" onclick="showAddServerModal()">+ Add Server</button>
+                    <button id="addServerBtn" class="btn btn-primary" onclick="showAddServerModal()">+ Add Server</button>
                 </div>
                 <div class="table-controls">
                     <input type="text" id="servers-search" placeholder="Search servers...">
@@ -101,11 +106,13 @@
             <div id="backups" class="tab-content">
                 <div class="section-header">
                     <h2>Backups</h2>
-                    <button class="btn btn-primary" onclick="showCreateBackupModal()">+ Create Backup</button>
+                    <div>
+                        <button id="batchDeleteBtn" class="btn btn-danger" onclick="batchDeleteBackups()" style="display:none;">🗑️ Delete Selected</button>
+                        <button id="createBackupBtn" class="btn btn-primary" onclick="showCreateBackupModal()">+ Create Backup</button>
+                    </div>
                 </div>
                 <div class="table-controls">
                     <input type="text" id="backups-search" placeholder="Search backups...">
-                    <button class="btn btn-danger" id="batch-delete-btn" onclick="batchDeleteBackups()" style="display:none;">🗑️ Delete Selected</button>
                     <div class="pagination">
                         <button class="btn btn-secondary" id="backups-prev">Prev</button>
                         <span id="backups-page">1</span>
@@ -140,7 +147,7 @@
             <div id="restores" class="tab-content">
                 <div class="section-header">
                     <h2>Restore Jobs</h2>
-                    <button class="btn btn-primary" onclick="showCreateRestoreModal()">+ Create Restore</button>
+                    <button id="createRestoreBtn" class="btn btn-primary" onclick="showCreateRestoreModal()">+ Create Restore</button>
                 </div>
                 <div class="table-container">
                     <table id="restores-table">
@@ -168,7 +175,7 @@
             <div id="scheduled" class="tab-content">
                 <div class="section-header">
                     <h2>Scheduled Backups</h2>
-                    <button class="btn btn-primary" onclick="showScheduleModal()">+ Schedule Backup</button>
+                    <button id="scheduleBackupBtn" class="btn btn-primary" onclick="showScheduleModal()">+ Schedule Backup</button>
                 </div>
                 <div class="table-container">
                     <table id="scheduled-table">
@@ -367,7 +374,7 @@
         </main>
 
         <footer>
-            <p>LDAPGuard <span id="app-version">v0.0.3</span> | <a href="/metrics" target="_blank">Metrics</a> | <a href="/health" target="_blank">Health</a></p>
+            <p>LDAPGuard <span id="app-version">v--</span> | <a href="/metrics" target="_blank">Metrics</a> | <a href="/health" target="_blank">Health</a></p>
         </footer>
     </div>
 
@@ -637,6 +644,33 @@
         </div>
     </div>
 
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeResetPasswordModal()">&times;</span>
+            <h2>Reset User Password</h2>
+            <form id="resetPasswordForm" onsubmit="handleResetPassword(event)">
+                <input type="hidden" id="resetUserId">
+                <div class="form-group">
+                    <label for="resetUsername">Username</label>
+                    <input type="text" id="resetUsername" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="resetNewPassword">New Password *</label>
+                    <input type="password" id="resetNewPassword" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="resetConfirmPassword">Confirm New Password *</label>
+                    <input type="password" id="resetConfirmPassword" required minlength="6">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeResetPasswordModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Reset Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Create API Key Modal -->
     <div id="createApiKeyModal" class="modal">
         <div class="modal-content">
@@ -667,6 +701,32 @@
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeCreateApiKeyModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Generate Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal (for all users) -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeChangePasswordModal()">&times;</span>
+            <h2>Change Password</h2>
+            <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                <div class="form-group">
+                    <label for="changeCurrentPassword">Current Password *</label>
+                    <input type="password" id="changeCurrentPassword" autocomplete="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="changeNewPassword">New Password *</label>
+                    <input type="password" id="changeNewPassword" autocomplete="new-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="changeConfirmPassword">Confirm New Password *</label>
+                    <input type="password" id="changeConfirmPassword" autocomplete="new-password" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Change Password</button>
                 </div>
             </form>
         </div>

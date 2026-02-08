@@ -58,9 +58,16 @@ async def get_ldap_server(server_id: int, db: AsyncSession = Depends(get_db)):
 async def create_ldap_server(
     server_data: LDAPServerCreate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Create a new LDAP server configuration."""
+    # Only admins and operators can create LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can create LDAP servers",
+        )
+
     # Check if name exists
     result = await db.execute(
         select(LDAPServer).where(LDAPServer.name == server_data.name)
@@ -112,9 +119,16 @@ async def update_ldap_server(
     server_id: int,
     server_data: LDAPServerUpdate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Update LDAP server configuration."""
+    # Only admins and operators can update LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can update LDAP servers",
+        )
+
     result = await db.execute(select(LDAPServer).where(LDAPServer.id == server_id))
     server = result.scalar_one_or_none()
 
@@ -142,8 +156,19 @@ async def update_ldap_server(
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_ldap_server(server_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_ldap_server(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """Delete LDAP server configuration."""
+    # Only admins and operators can delete LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can delete LDAP servers",
+        )
+
     result = await db.execute(select(LDAPServer).where(LDAPServer.id == server_id))
     server = result.scalar_one_or_none()
 
