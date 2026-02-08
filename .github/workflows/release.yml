@@ -53,7 +53,7 @@ jobs:
  
       - name: Update Kustomize image tags
         run: |
-          sed -i 's/newTag: ".*"/newTag: "${{ steps.bump.outputs.new }}"/' k8s/overlays/production/kustomization.yaml
+          sed -i 's/newTag: ".*"/newTag: "${{ steps.bump.outputs.new }}"/' k8s/kustomization.yaml
 
 
       - name: Create Pull Request
