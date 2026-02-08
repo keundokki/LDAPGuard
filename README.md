@@ -96,11 +96,16 @@ Simplest deployment with key-value customization:
 ```bash
 # 1. Create namespace and secrets
 kubectl create namespace ldapguard
+
+# Use a URL-safe password (hex) and reuse it in DATABASE_URL
+POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+DATABASE_URL="postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard"
+
 kubectl create secret generic ldapguard-secrets \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard" \
+  --from-literal=DATABASE_URL="$DATABASE_URL" \
   -n ldapguard
 
 # 2. Deploy with Helm
@@ -379,15 +384,23 @@ kubectl apply -f k8s/examples/patches/resource-limits.yaml
 
 **Secrets Management:**
 - Secrets are NOT included in Git (security best practice)
-- Create manually before deployment:
+- Create manually before deployment (use the same password in both fields):
   ```bash
+  POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+  DATABASE_URL="postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard"
+
   kubectl create secret generic ldapguard-secrets \
-    --from-literal=POSTGRES_PASSWORD="..." \
-    --from-literal=SECRET_KEY="..." \
-    --from-literal=ENCRYPTION_KEY="..." \
-    --from-literal=DATABASE_URL="..." \
+    --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+    --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
+    --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+    --from-literal=DATABASE_URL="$DATABASE_URL" \
     -n ldapguard
   ```
+  - If you use a base64 password, URL-encode it before putting it in `DATABASE_URL`.
+
+**Common Failure (Password Mismatch):**
+- If API logs show `password authentication failed`, the password in `POSTGRES_PASSWORD` does not match the one in `DATABASE_URL`.
+- See the Recovery section for the full reset procedure.
 
 **Storage Requirements:**
 - PostgreSQL & Redis: ReadWriteOnce (RWO) - supported by most storage classes
@@ -433,6 +446,25 @@ spec:
     - port: api
       path: /metrics
 ```
+
+## 🧰 Recovery (Kubernetes)
+
+### Database password mismatch
+
+If the API logs show `password authentication failed`, the PostgreSQL password stored in the database does not match the password in `ldapguard-secrets`.
+
+**Fix (full reset, data loss):**
+```bash
+kubectl scale deployment api worker -n ldapguard --replicas=0
+kubectl delete statefulset postgres -n ldapguard
+kubectl delete pvc postgres-data -n ldapguard
+kubectl apply -k k8s/ -n ldapguard
+kubectl scale deployment api worker -n ldapguard --replicas=2
+```
+
+**Prevention:**
+- Always reuse the same password in both `POSTGRES_PASSWORD` and `DATABASE_URL`.
+- Prefer URL-safe passwords (hex) or URL-encode base64 passwords.
 
 ## 🏥 High Availability
 

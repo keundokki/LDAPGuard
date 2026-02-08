@@ -15,11 +15,14 @@ Production-ready Kubernetes manifests for deploying LDAPGuard using Kustomize an
 
 **1. Create secrets:**
 ```bash
+POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+DATABASE_URL="postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard"
+
 kubectl create secret generic ldapguard-secrets \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:$(openssl rand -base64 24)@postgres:5432/ldapguard" \
+  --from-literal=DATABASE_URL="$DATABASE_URL" \
   -n ldapguard --create-namespace
 ```
 
@@ -89,11 +92,14 @@ k8s/
 
 ```bash
 # 1. Create secrets
+POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+DATABASE_URL="postgresql+asyncpg://ldapguard:${POSTGRES_PASSWORD}@postgres:5432/ldapguard"
+
 kubectl create secret generic ldapguard-secrets \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard" \
+  --from-literal=DATABASE_URL="$DATABASE_URL" \
   -n ldapguard --create-namespace
 
 # 2. Deploy
@@ -280,6 +286,8 @@ Adjust `network/networkpolicy.yaml` for stricter policies.
 
 ## 🛠️ Troubleshooting
 
+If you see `password authentication failed`, the password in `POSTGRES_PASSWORD` does not match the one in `DATABASE_URL`. See the Recovery section below.
+
 ### Pods Pending (Storage Issues)
 
 ```bash
@@ -294,6 +302,38 @@ Check secret exists and has correct values:
 ```bash
 kubectl get secret ldapguard-secrets -n ldapguard -o yaml
 ```
+
+If you see `password authentication failed`:
+
+1. Ensure `POSTGRES_PASSWORD` matches the password in `DATABASE_URL`.
+2. Use URL-safe passwords (hex) or URL-encode base64 passwords.
+3. For a full reset (data loss), reinitialize PostgreSQL with the current secret:
+  ```bash
+  kubectl scale deployment api worker -n ldapguard --replicas=0
+  kubectl delete statefulset postgres -n ldapguard
+  kubectl delete pvc postgres-data -n ldapguard
+  kubectl apply -k k8s/ -n ldapguard
+  kubectl scale deployment api worker -n ldapguard --replicas=2
+  ```
+
+## 🧰 Recovery
+
+### Full reset (data loss)
+
+Use this when the database password is out of sync or you want a clean install:
+
+```bash
+kubectl scale deployment api worker -n ldapguard --replicas=0
+kubectl delete statefulset postgres -n ldapguard
+kubectl delete pvc postgres-data -n ldapguard
+kubectl apply -k k8s/ -n ldapguard
+kubectl scale deployment api worker -n ldapguard --replicas=2
+```
+
+### Prevention
+
+- Always reuse the same password in `POSTGRES_PASSWORD` and `DATABASE_URL`.
+- Prefer URL-safe passwords (hex) or URL-encode base64 passwords.
 
 ### Image Pull Errors
 
