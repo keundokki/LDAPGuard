@@ -174,23 +174,38 @@ async def delete_ldap_server(
 
     try:
         from sqlalchemy import text
-        
+
         # First check if server exists using raw SQL to avoid loading into session
-        check_result = await db.execute(text("SELECT id FROM ldap_servers WHERE id = :server_id"), {"server_id": server_id})
+        check_result = await db.execute(
+            text("SELECT id FROM ldap_servers WHERE id = :server_id"),
+            {"server_id": server_id},
+        )
         if not check_result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="LDAP server not found"
             )
-        
+
         # Delete restore jobs first
-        await db.execute(text("DELETE FROM restore_jobs WHERE ldap_server_id = :server_id"), {"server_id": server_id})
+        await db.execute(
+            text("DELETE FROM restore_jobs WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
         # Delete scheduled backups
-        await db.execute(text("DELETE FROM scheduled_backups WHERE ldap_server_id = :server_id"), {"server_id": server_id})
+        await db.execute(
+            text("DELETE FROM scheduled_backups WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
         # Delete backups
-        await db.execute(text("DELETE FROM backups WHERE ldap_server_id = :server_id"), {"server_id": server_id})
+        await db.execute(
+            text("DELETE FROM backups WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
         # Delete the LDAP server
-        await db.execute(text("DELETE FROM ldap_servers WHERE id = :server_id"), {"server_id": server_id})
-        
+        await db.execute(
+            text("DELETE FROM ldap_servers WHERE id = :server_id"),
+            {"server_id": server_id},
+        )
+
         await db.commit()
     except HTTPException:
         await db.rollback()

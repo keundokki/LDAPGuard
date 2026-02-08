@@ -45,6 +45,7 @@ dump.rdb
 # LDAP Development (data only, not config)
 LDAP/ldap-data/
 LDAP/ldap-config/
+LDAP/ldap-certs/
 
 # IDE
 .vscode/

@@ -74,7 +74,11 @@ async def register(
     return new_user
 
 
-@router.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/users/",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def admin_create_user(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
@@ -123,7 +127,11 @@ async def admin_create_user(
     return new_user
 
 
-@router.post("/bootstrap", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/bootstrap",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def bootstrap_admin(
     user_data: UserCreate, db: AsyncSession = Depends(get_db)
 ):

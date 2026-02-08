@@ -50,15 +50,20 @@ class WorkerService:
             )
             scheduled_backups = result.scalars().all()
 
-        logger.info(f"Found {len(scheduled_backups)} active scheduled backups in database")
+        logger.info(
+            "Found %s active scheduled backups in database",
+            len(scheduled_backups),
+        )
 
         active_ids = {schedule.id for schedule in scheduled_backups}
 
         for scheduled_backup in scheduled_backups:
             try:
                 logger.info(
-                    f"Adding scheduled backup: {scheduled_backup.name} "
-                    f"(id: {scheduled_backup.id}, cron: {scheduled_backup.cron_expression})"
+                    "Adding scheduled backup: %s (id: %s, cron: %s)",
+                    scheduled_backup.name,
+                    scheduled_backup.id,
+                    scheduled_backup.cron_expression,
                 )
                 # Add or update scheduled job
                 self.scheduler.add_job(
@@ -69,12 +74,16 @@ class WorkerService:
                     replace_existing=True,
                 )
                 logger.info(
-                    f"Successfully added scheduled backup: {scheduled_backup.name} "
-                    f"(cron: {scheduled_backup.cron_expression})"
+                    "Successfully added scheduled backup: %s (cron: %s)",
+                    scheduled_backup.name,
+                    scheduled_backup.cron_expression,
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to add scheduled backup {scheduled_backup.id}: {e}", exc_info=True
+                    "Failed to add scheduled backup %s: %s",
+                    scheduled_backup.id,
+                    e,
+                    exc_info=True,
                 )
 
         # Remove jobs that no longer exist or were deactivated
@@ -91,9 +100,9 @@ class WorkerService:
 
         # Log all current jobs
         all_jobs = self.scheduler.get_jobs()
-        logger.info(f"Scheduler now has {len(all_jobs)} total jobs")
+        logger.info("Scheduler now has %s total jobs", len(all_jobs))
         for job in all_jobs:
-            logger.info(f"  - Job ID: {job.id}, Next run scheduled")
+            logger.info("  - Job ID: %s, Next run scheduled", job.id)
 
     async def execute_scheduled_backup(self, scheduled_backup_id: int):
         """Execute a scheduled backup."""
@@ -118,10 +127,12 @@ class WorkerService:
             logger.info("Querying for available users")
             result = await db.execute(select(User))
             user = result.scalars().first()
-            logger.info(f"Found user: {user.id if user else 'None'}")
-            
+            logger.info("Found user: %s", user.id if user else "None")
+
             if not user:
-                logger.error("No users found in database, cannot create scheduled backup")
+                logger.error(
+                    "No users found in database, cannot create scheduled backup"
+                )
                 return
 
             # Create backup record

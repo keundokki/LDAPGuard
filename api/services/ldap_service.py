@@ -230,6 +230,7 @@ class LDAPService:
         filter_str = f"(&{search_filter}(modifyTimestamp>={time_str}))"
 
         return self.search_all_entries(filter_str)
+
     def test_connection(self) -> bool:
         """Test LDAP connection."""
         try:

@@ -74,9 +74,17 @@ class LDAPServer(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    backups = relationship("Backup", back_populates="ldap_server", cascade="all, delete-orphan")
-    scheduled_backups = relationship("ScheduledBackup", back_populates="ldap_server", cascade="all, delete-orphan")
-    restore_jobs = relationship("RestoreJob", back_populates="ldap_server", cascade="all, delete-orphan")
+    backups = relationship(
+        "Backup", back_populates="ldap_server", cascade="all, delete-orphan"
+    )
+    scheduled_backups = relationship(
+        "ScheduledBackup",
+        back_populates="ldap_server",
+        cascade="all, delete-orphan",
+    )
+    restore_jobs = relationship(
+        "RestoreJob", back_populates="ldap_server", cascade="all, delete-orphan"
+    )
 
 
 class Backup(Base):

@@ -248,7 +248,9 @@ async def create_backup(
         await redis_client.ping()
         queue_length = await redis_client.rpush("backup_queue", str(new_backup.id))
         logger.info(
-            f"Queued backup {new_backup.id} for processing (queue length: {queue_length})"
+            "Queued backup %s for processing (queue length: %s)",
+            new_backup.id,
+            queue_length,
         )
     except Exception as e:
         logger.error(f"Failed to queue backup {new_backup.id}: {e}")
