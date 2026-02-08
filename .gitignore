@@ -51,6 +51,8 @@ dump.rdb
 
 # Kubernetes - user-specific customizations (if copying patches locally)
 k8s/patches/custom-*.yaml
+k8s/examples/*-ingress.yaml
+!k8s/examples/*-ingress.example.yaml
 
 # Helm - values files with secrets
 helm/values-*.yaml
