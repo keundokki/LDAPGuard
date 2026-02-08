@@ -69,7 +69,9 @@ spec:
                 secretKeyRef:
                   name: ldapguard-secrets
                   key: ENCRYPTION_KEY
-          volumeMounts: []
+          volumeMounts:
+            - name: backup-data
+              mountPath: /app/backups
           livenessProbe:
             httpGet:
               path: /health
@@ -86,9 +88,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-      volumes: []
-      # ⚠️  To enable backup volume, uncomment these lines AND uncomment pvc-backup.yaml in kustomization.yaml:
-      # volumes:
-      #   - name: backup-data
-      #     persistentVolumeClaim:
-      #       claimName: backup-data
+      volumes:
+        - name: backup-data
+          persistentVolumeClaim:
+            claimName: backup-data

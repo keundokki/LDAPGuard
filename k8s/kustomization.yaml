@@ -10,7 +10,7 @@ resources:
   - storage/pvc-postgres.yaml
   - storage/pvc-redis.yaml
   # Uncomment if you have ReadWriteMany storage (NFS, CephFS, etc.)
-  # - storage/pvc-backup.yaml
+  - storage/pvc-backup.yaml
   
   # Stateful Services
   - statefulsets/postgres-statefulset.yaml
