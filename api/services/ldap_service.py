@@ -32,6 +32,13 @@ class LDAPService:
         protocol = "ldaps" if self.use_ssl else "ldap"
         ldap_url = f"{protocol}://{self.host}:{self.port}"
 
+        # Disable certificate verification for LDAPS with self-signed certificates
+        # Must be done before initialize()
+        if self.use_ssl:
+            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+            # Also ignore certificate hostname mismatches
+            ldap.set_option(ldap.OPT_X_TLS_NEWCTX, 0)
+
         self.conn = ldap.initialize(ldap_url)
         self.conn.set_option(ldap.OPT_REFERRALS, 0)
 
@@ -56,6 +63,32 @@ class LDAPService:
         try:
             result: List[Tuple[str, Dict]] = self.conn.search_s(  # type: ignore
                 self.base_dn, ldap.SCOPE_SUBTREE, search_filter, None
+            )
+            return result
+        except ldap.LDAPError as e:
+            raise Exception(f"LDAP search failed: {str(e)}")
+
+    def search_entries(
+        self,
+        search_filter: str = "(objectClass=*)",
+        attributes: Optional[List[str]] = None,
+        size_limit: int = 0,
+    ) -> List[Tuple[str, Dict]]:
+        """Search entries with optional filters and size limit."""
+        if not self.conn:
+            self.connect()
+
+        try:
+            result: List[Tuple[str, Dict]] = self.conn.search_ext_s(  # type: ignore
+                self.base_dn,
+                ldap.SCOPE_SUBTREE,
+                search_filter,
+                attributes,
+                0,
+                None,
+                None,
+                -1,
+                size_limit,
             )
             return result
         except ldap.LDAPError as e:
@@ -204,5 +237,7 @@ class LDAPService:
             self.connect()
             self.disconnect()
             return True
+        except Exception as e:
+            raise Exception(f"LDAP connection failed: {str(e)}")
         except Exception:
             return False

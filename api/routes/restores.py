@@ -53,6 +53,13 @@ async def create_restore_job(
     current_user=Depends(get_current_user),
 ):
     """Create a new restore job."""
+    # Only admins and operators can create restore jobs
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can create restore jobs",
+        )
+
     # Verify backup exists
     result = await db.execute(select(Backup).where(Backup.id == restore_data.backup_id))
     backup = result.scalar_one_or_none()

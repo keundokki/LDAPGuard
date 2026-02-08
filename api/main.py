@@ -131,6 +131,15 @@ async def health_check():
     }
 
 
+@app.get("/version")
+async def version():
+    """Version endpoint for UI display."""
+    return {
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }
+
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint."""

@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +13,8 @@ from api.core.security import get_current_user
 from api.models.models import LDAPServer
 from api.schemas.schemas import LDAPServerCreate, LDAPServerResponse, LDAPServerUpdate
 from api.services.ldap_service import LDAPService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ldap-servers", tags=["LDAP Servers"])
 
@@ -58,9 +61,16 @@ async def get_ldap_server(server_id: int, db: AsyncSession = Depends(get_db)):
 async def create_ldap_server(
     server_data: LDAPServerCreate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Create a new LDAP server configuration."""
+    # Only admins and operators can create LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can create LDAP servers",
+        )
+
     # Check if name exists
     result = await db.execute(
         select(LDAPServer).where(LDAPServer.name == server_data.name)
@@ -112,9 +122,16 @@ async def update_ldap_server(
     server_id: int,
     server_data: LDAPServerUpdate,
     db: AsyncSession = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Update LDAP server configuration."""
+    # Only admins and operators can update LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can update LDAP servers",
+        )
+
     result = await db.execute(select(LDAPServer).where(LDAPServer.id == server_id))
     server = result.scalar_one_or_none()
 
@@ -142,18 +159,64 @@ async def update_ldap_server(
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_ldap_server(server_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_ldap_server(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """Delete LDAP server configuration."""
-    result = await db.execute(select(LDAPServer).where(LDAPServer.id == server_id))
-    server = result.scalar_one_or_none()
-
-    if not server:
+    # Only admins and operators can delete LDAP servers
+    if current_user.role.value not in ["admin", "operator"]:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="LDAP server not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and operators can delete LDAP servers",
         )
 
-    await db.delete(server)
-    await db.commit()
+    try:
+        from sqlalchemy import text
+
+        # First check if server exists using raw SQL to avoid loading into session
+        check_result = await db.execute(
+            text("SELECT id FROM ldap_servers WHERE id = :server_id"),
+            {"server_id": server_id},
+        )
+        if not check_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="LDAP server not found"
+            )
+
+        # Delete restore jobs first
+        await db.execute(
+            text("DELETE FROM restore_jobs WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
+        # Delete scheduled backups
+        await db.execute(
+            text("DELETE FROM scheduled_backups WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
+        # Delete backups
+        await db.execute(
+            text("DELETE FROM backups WHERE ldap_server_id = :server_id"),
+            {"server_id": server_id},
+        )
+        # Delete the LDAP server
+        await db.execute(
+            text("DELETE FROM ldap_servers WHERE id = :server_id"),
+            {"server_id": server_id},
+        )
+
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        logger.exception(f"Error deleting LDAP server {server_id}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete LDAP server: {str(e)}",
+        )
 
     return None
 
@@ -175,20 +238,17 @@ async def test_ldap_connection(
             bind_password=test_data.bind_password,
         )
 
-        # Try to connect and get basic info
-        entries = await ldap_service.search_entries(
-            search_filter="(objectClass=*)", attributes=["dn"], size_limit=1
-        )
-
-        entry_count = len(entries) if entries else 0
+        # Try to connect and bind; avoid search to keep test lightweight
+        if not ldap_service.test_connection():
+            raise Exception("LDAP bind failed")
 
         return {
             "status": "success",
-            "message": f"Successfully connected to LDAP server. "
-            f"Found {entry_count} entries.",
+            "message": "Successfully connected to LDAP server.",
         }
 
     except Exception as e:
+        logger.exception("LDAP connection test failed")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Connection test failed: {str(e)}",

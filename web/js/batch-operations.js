@@ -12,7 +12,7 @@ function toggleAllBackups(checkbox) {
 // Update batch delete button visibility
 function updateBatchDeleteButton() {
     const checkboxes = document.querySelectorAll('.backup-checkbox:checked');
-    const button = document.getElementById('batch-delete-btn');
+    const button = document.getElementById('batchDeleteBtn');
     
     if (checkboxes.length > 0) {
         button.style.display = 'block';

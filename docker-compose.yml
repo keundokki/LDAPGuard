@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ldapguard-network
+      - ldapguard-net
 
   redis:
     image: redis:7-alpine
@@ -34,7 +34,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ldapguard-network
+      - ldapguard-net
 
   api:
     image: ghcr.io/keundokki/ldapguard-api:latest
@@ -61,7 +61,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - ldapguard-network
+      - ldapguard-net
 
   worker:
     image: ghcr.io/keundokki/ldapguard-worker:latest
@@ -80,7 +80,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - ldapguard-network
+      - ldapguard-net
 
   web:
     image: ghcr.io/keundokki/ldapguard-web:latest
@@ -92,7 +92,7 @@ services:
     depends_on:
       - api
     networks:
-      - ldapguard-network
+      - ldapguard-net
 
 volumes:
   postgres_data:
@@ -100,5 +100,6 @@ volumes:
   backup_data:
 
 networks:
-  ldapguard-network:
+  ldapguard-net:
     driver: bridge
+    external: true
