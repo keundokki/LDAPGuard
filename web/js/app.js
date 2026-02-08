@@ -1,6 +1,13 @@
 // API base URL
 const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || window.API_URL || '/api';
 
+// Pagination state
+const paginationState = {
+    backups: { skip: 0, limit: 50, hasMore: true, allItems: [], perServerLoaded: {} },
+    serverBackups: { skip: 0, limit: 10, hasMore: true, allItems: [], selectedServerId: null },
+    restores: { skip: 0, limit: 50, hasMore: true, allItems: [] }
+};
+
 // Auth helper functions
 function getAuthToken() {
     return localStorage.getItem('auth_token');
@@ -131,8 +138,6 @@ async function checkAuthAndInit() {
     } catch (error) {
         console.error('Auth check failed:', error);
         clearAuthToken();
-        document.getElementById('loginModal').style.display = 'block';
-        setAdminVisibility(false);
         setOperatorVisibility(false);
     }
 }
@@ -152,7 +157,6 @@ async function handleLogin(event) {
             },
             body: JSON.stringify({ username, password })
         });
-
         const contentType = response.headers.get('content-type') || '';
         let payload;
         if (contentType.includes('application/json')) {
@@ -456,7 +460,9 @@ async function loadServers() {
                     </span>
                 </td>
                 <td class="action-cell">
-                    <button class="btn btn-primary" onclick="backupServer(${parseInt(server.id)})">Backup Now</button>
+                    <button class="btn btn-primary btn-sm" onclick="backupServer(${parseInt(server.id)})">Backup Now</button>
+                    <button class="btn btn-info btn-sm" onclick="showEditServerModal(${parseInt(server.id)})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteServer(${parseInt(server.id)}, '${escapeHtml(server.name)}')">Delete</button>
                 </td>
             </tr>
         `).join('');
@@ -527,26 +533,99 @@ async function loadBackupOptions(selectId, selectedId = null) {
 
 // Load backups
 async function loadBackups() {
+    paginationState.backups.skip = 0;
+    paginationState.backups.allItems = [];
+    await loadBackupsPage();
+}
+
+async function loadBackupsPage() {
     try {
-        const response = await fetch(`${API_URL}/backups/`, {
-            headers: authHeaders()
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to load backups: ${response.status} ${response.statusText}`);
+        const refreshStatus = document.getElementById('backups-refresh-status');
+        if (refreshStatus && paginationState.backups.skip === 0) {
+            refreshStatus.textContent = 'Refreshing...';
         }
-        const backups = await response.json();
+
+        const [backupsResponse, serversResponse] = await Promise.all([
+            fetch(`${API_URL}/backups/?skip=${paginationState.backups.skip}&limit=${paginationState.backups.limit}`, { headers: authHeaders() }),
+            fetch(`${API_URL}/ldap-servers/`, { headers: authHeaders() })
+        ]);
+
+        if (!backupsResponse.ok) {
+            throw new Error(`Failed to load backups: ${backupsResponse.status} ${backupsResponse.statusText}`);
+        }
+
+        const newBackups = await backupsResponse.json();
+        const servers = serversResponse.ok ? await serversResponse.json() : [];
         
-        const tbody = document.getElementById('backups-tbody');
+        // Add new items to the list
+        paginationState.backups.allItems.push(...newBackups);
         
-        if (backups.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="no-data">No backups found</td></tr>';
-            return;
+        // Check if there are more items
+        paginationState.backups.hasMore = newBackups.length === paginationState.backups.limit;
+        
+        // Render backups
+        renderBackups(paginationState.backups.allItems, servers);
+        
+        // Keep load more button hidden (using View All per-server buttons instead)
+        const loadMoreBtn = document.getElementById('loadMoreBackupsBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = 'none';
         }
         
-        tbody.innerHTML = backups.map(backup => `
+        if (refreshStatus && paginationState.backups.skip === 0) {
+            refreshStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        }
+    } catch (error) {
+        console.error('Error loading backups:', error);
+        const refreshStatus = document.getElementById('backups-refresh-status');
+        if (refreshStatus) {
+            refreshStatus.textContent = 'Refresh failed';
+        }
+    }
+}
+
+async function loadMoreBackups() {
+    paginationState.backups.skip += paginationState.backups.limit;
+    await loadBackupsPage();
+}
+
+function renderBackups(backups, servers) {
+    const serverMap = new Map(servers.map(server => [parseInt(server.id), server.name]));
+    const tbody = document.getElementById('backups-tbody');
+    const ITEMS_PER_SERVER = 5;
+    
+    if (backups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="no-data">No backups found</td></tr>';
+        return;
+    }
+    
+    const groupedBackups = new Map();
+    backups.forEach(backup => {
+        const serverName = serverMap.get(parseInt(backup.ldap_server_id)) || `Server #${parseInt(backup.ldap_server_id)}`;
+        if (!groupedBackups.has(serverName)) {
+            groupedBackups.set(serverName, []);
+        }
+        groupedBackups.get(serverName).push(backup);
+    });
+
+    const backupRows = [];
+    Array.from(groupedBackups.keys()).sort((a, b) => a.localeCompare(b)).forEach(serverName => {
+        const serverBackups = groupedBackups.get(serverName);
+        const showCount = Math.min(ITEMS_PER_SERVER, serverBackups.length);
+        
+        backupRows.push(`
+            <tr class="group-row">
+                <td colspan="9"><span class="group-label">${escapeHtml(serverName)}</span></td>
+            </tr>
+        `);
+
+        backupRows.push(serverBackups.slice(0, showCount).map(backup => `
             <tr>
+                <td>
+                    <input type="checkbox" class="backup-checkbox" value="${parseInt(backup.id)}" onchange="updateBatchDeleteButton()">
+                </td>
                 <td>${parseInt(backup.id)}</td>
-                <td>Server #${parseInt(backup.ldap_server_id)}</td>
+                <td>${escapeHtml(serverName)}</td>
                 <td>${escapeHtml(backup.backup_type)}</td>
                 <td>
                     <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
@@ -559,39 +638,395 @@ async function loadBackups() {
                 <td>${new Date(backup.created_at).toLocaleString()}</td>
                 <td class="action-cell">
                     ${backup.status === 'completed' ? 
-                        `<button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
+                        `<button class="btn btn-secondary" onclick="showBackupContent(${parseInt(backup.id)})">View</button>
+                         <button class="btn btn-info" onclick="downloadBackupContent(${parseInt(backup.id)})">Download</button>
+                         <button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
                         ''}
                 </td>
             </tr>
-        `).join('');
+        `).join(''));
+        
+        // Add "Load More" button row if there are more backups
+        if (serverBackups.length > ITEMS_PER_SERVER) {
+            backupRows.push(`
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 10px;">
+                        <button class="btn btn-secondary" data-server-id="${serverBackups[0].ldap_server_id}" onclick="viewServerBackups(this.dataset.serverId, '${escapeHtml(serverName).replace(/'/g, "&#39;")}')">View All (${serverBackups.length} total)</button>
+                    </td>
+                </tr>
+            `);
+        }
+    });
+
+    tbody.innerHTML = backupRows.join('');
+
+    const selectAll = document.getElementById('select-all-backups');
+    if (selectAll) {
+        selectAll.checked = false;
+    }
+    if (typeof updateBatchDeleteButton === 'function') {
+        updateBatchDeleteButton();
+    }
+}
+
+async function viewServerBackups(serverId, displayServerName) {
+    // Parse serverId as integer
+    serverId = parseInt(serverId);
+    
+    // Create and show modal with all backups for the selected server
+    let modal = document.getElementById('serverBackupsModal');
+    
+    if (!modal) {
+        // Create modal if it doesn't exist
+        modal = document.createElement('div');
+        modal.id = 'serverBackupsModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2 id="serverBackupsTitle"></h2>
+                    <span class="close" onclick="closeServerBackupsModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <table id="serverBackupsTable" class="data-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all-server-backups" onchange="toggleAllServerBackups(this)"></th>
+                                <th>ID</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Size</th>
+                                <th>Entries</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="serverBackupsTbody"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeServerBackupsModal()">Close</button>
+                    <button class="btn btn-danger" id="serverBackupDeleteBtn" onclick="batchDeleteServerBackups()" style="display:none;">Delete Selected</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    // Show modal
+    modal.style.display = 'block';
+    modal.style.zIndex = '1500';  // Set z-index higher than default modals
+    document.getElementById('serverBackupsTitle').textContent = `All Backups for ${escapeHtml(displayServerName)}`;
+    
+    // Show loading state
+    const tbody = document.getElementById('serverBackupsTbody');
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">Loading...</td></tr>';
+    const selectAllCheckbox = document.getElementById('select-all-server-backups');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+    }
+    
+    // Fetch backups for this server
+    try {
+        const response = await fetch(`${API_URL}/backups/?skip=0&limit=1000`, {
+            headers: authHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch backups: ${response.status}`);
+        }
+        
+        const backups = await response.json();
+        
+        // Filter backups for this server by ID
+        const filteredBackups = backups.filter(backup => parseInt(backup.ldap_server_id) === serverId);
+        
+        console.log(`Loaded ${backups.length} backups total, ${filteredBackups.length} for server ${serverId}`);
+        
+        // Render backups in modal
+        if (filteredBackups.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">No backups found for this server</td></tr>';
+        } else {
+            tbody.innerHTML = filteredBackups.map(backup => `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="server-backup-checkbox" value="${parseInt(backup.id)}" onchange="updateServerBackupDeleteButton()">
+                    </td>
+                    <td>${parseInt(backup.id)}</td>
+                    <td>${escapeHtml(backup.backup_type)}</td>
+                    <td>
+                        <span class="status-badge status-${backup.status.replace('_', '-')}">
+                            ${escapeHtml(backup.status)}
+                        </span>
+                    </td>
+                    <td>${backup.file_size ? formatBytes(backup.file_size) : 'N/A'}</td>
+                    <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
+                    <td>${new Date(backup.created_at).toLocaleString()}</td>
+                    <td class="action-cell">
+                        ${backup.status === 'completed' ? 
+                            `<details class="action-menu">
+                                <summary class="btn btn-secondary btn-sm">Actions</summary>
+                                <div class="action-menu-list">
+                                    <button class="btn btn-secondary btn-sm" onclick="showBackupContent(${parseInt(backup.id)})">View</button>
+                                    <button class="btn btn-info btn-sm" onclick="downloadBackupContent(${parseInt(backup.id)})">Download</button>
+                                    <button class="btn btn-success btn-sm" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>
+                                </div>
+                            </details>` : 
+                            ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        updateServerBackupDeleteButton();
     } catch (error) {
-        console.error('Error loading backups:', error);
+        showError(`Error loading backups for ${escapeHtml(displayServerName)}: ${error.message}`);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--danger-color);">Error loading backups: ${escapeHtml(error.message)}</td></tr>`;
+        console.error('Error:', error);
+    }
+}
+
+function closeServerBackupsModal() {
+    const modal = document.getElementById('serverBackupsModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Close modal when clicking outside of it
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('serverBackupsModal');
+    if (modal && event.target === modal) {
+        modal.style.display = 'none';
+    }
+});
+
+function toggleAllServerBackups(checkbox) {
+    const checkboxes = document.querySelectorAll('.server-backup-checkbox');
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    updateServerBackupDeleteButton();
+}
+
+function updateServerBackupDeleteButton() {
+    const checkboxes = document.querySelectorAll('.server-backup-checkbox:checked');
+    const deleteBtn = document.getElementById('serverBackupDeleteBtn');
+    deleteBtn.style.display = checkboxes.length > 0 ? 'block' : 'none';
+}
+
+async function batchDeleteServerBackups() {
+    const checkboxes = document.querySelectorAll('.server-backup-checkbox:checked');
+    const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    if (ids.length === 0) {
+        showError('No backups selected');
+        return;
+    }
+    
+    if (!confirm(`Delete ${ids.length} backup(s)? This cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        for (const id of ids) {
+            const response = await fetch(`${API_URL}/backups/${id}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to delete backup ${id}`);
+            }
+        }
+        
+        showSuccess(`Deleted ${ids.length} backup(s)`);
+        closeServerBackupsModal();
+        loadBackups();
+    } catch (error) {
+        showError(`Error deleting backups: ${error.message}`);
+        console.error('Error:', error);
+    }
+}
+
+async function fetchServersForBackups() {
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers`, {
+            headers: authHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch servers: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data.items || [];
+    } catch (error) {
+        console.error('Error fetching servers:', error);
+        return [];
+    }
+}
+
+async function showBackupContent(backupId) {
+    const modal = document.getElementById('backupContentModal');
+    const contentEl = document.getElementById('backupContentBody');
+    const metaEl = document.getElementById('backupContentMeta');
+
+    if (!modal || !contentEl || !metaEl) return;
+
+    contentEl.textContent = '';
+    metaEl.textContent = 'Loading...';
+    modal.style.display = 'block';
+    modal.style.zIndex = '2000';  // Ensure it appears on top of other modals
+
+    try {
+        const response = await fetch(`${API_URL}/backups/${parseInt(backupId)}/content?max_lines=200`, {
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to load backup content');
+        }
+
+        const data = await response.json();
+        contentEl.textContent = data.content || '';
+        metaEl.textContent = data.truncated
+            ? `Showing first ${data.lines} lines (truncated)`
+            : `Showing ${data.lines} lines`;
+    } catch (error) {
+        contentEl.textContent = '';
+        metaEl.textContent = error.message || 'Failed to load backup content';
+    }
+}
+
+function closeBackupContentModal() {
+    const modal = document.getElementById('backupContentModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function downloadBackupContent(backupId) {
+    try {
+        const response = await fetch(`${API_URL}/backups/${parseInt(backupId)}/download`, {
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to download backup');
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get('content-disposition') || '';
+        const match = disposition.match(/filename="([^"]+)"/i);
+        const filename = match ? match[1] : `backup-${parseInt(backupId)}.ldif`;
+
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        showToast('error', error.message || 'Failed to download backup');
     }
 }
 
 // Load restore jobs
 async function loadRestores() {
+    paginationState.restores.skip = 0;
+    paginationState.restores.allItems = [];
+    await loadRestoresPage();
+}
+
+async function loadRestoresPage() {
     try {
-        const response = await fetch(`${API_URL}/restores/`, {
-            headers: authHeaders()
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to load restores: ${response.status} ${response.statusText}`);
+        const refreshStatus = document.getElementById('restores-refresh-status');
+        if (refreshStatus && paginationState.restores.skip === 0) {
+            refreshStatus.textContent = 'Refreshing...';
         }
-        const restores = await response.json();
+
+        const [restoresResponse, serversResponse] = await Promise.all([
+            fetch(`${API_URL}/restores/?skip=${paginationState.restores.skip}&limit=${paginationState.restores.limit}`, { headers: authHeaders() }),
+            fetch(`${API_URL}/ldap-servers/`, { headers: authHeaders() })
+        ]);
+
+        if (!restoresResponse.ok) {
+            throw new Error(`Failed to load restores: ${restoresResponse.status} ${restoresResponse.statusText}`);
+        }
+
+        const newRestores = await restoresResponse.json();
+        const servers = serversResponse.ok ? await serversResponse.json() : [];
         
-        const tbody = document.getElementById('restores-tbody');
+        // Add new items to the list
+        paginationState.restores.allItems.push(...newRestores);
         
-        if (restores.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No restore jobs found</td></tr>';
-            return;
+        // Check if there are more items
+        paginationState.restores.hasMore = newRestores.length === paginationState.restores.limit;
+        
+        // Render restores
+        renderRestores(paginationState.restores.allItems, servers);
+        
+        // Keep load more button hidden (using View All per-server buttons instead)
+        const loadMoreBtn = document.getElementById('loadMoreRestoresBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = 'none';
         }
         
-        tbody.innerHTML = restores.map(restore => `
+        if (refreshStatus && paginationState.restores.skip === 0) {
+            refreshStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        }
+    } catch (error) {
+        console.error('Error loading restores:', error);
+        const refreshStatus = document.getElementById('restores-refresh-status');
+        if (refreshStatus) {
+            refreshStatus.textContent = 'Refresh failed';
+        }
+    }
+}
+
+async function loadMoreRestores() {
+    paginationState.restores.skip += paginationState.restores.limit;
+    await loadRestoresPage();
+}
+
+function renderRestores(restores, servers) {
+    const serverMap = new Map(servers.map(server => [parseInt(server.id), server.name]));
+    const tbody = document.getElementById('restores-tbody');
+    const ITEMS_PER_SERVER = 5;
+    
+    if (restores.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-data">No restore jobs found</td></tr>';
+        return;
+    }
+    
+    const groupedRestores = new Map();
+    restores.forEach(restore => {
+        const serverName = serverMap.get(parseInt(restore.ldap_server_id)) || `Server #${parseInt(restore.ldap_server_id)}`;
+        if (!groupedRestores.has(serverName)) {
+            groupedRestores.set(serverName, []);
+        }
+        groupedRestores.get(serverName).push(restore);
+    });
+
+    const restoreRows = [];
+    Array.from(groupedRestores.keys()).sort((a, b) => a.localeCompare(b)).forEach(serverName => {
+        const serverRestores = groupedRestores.get(serverName);
+        const showCount = Math.min(ITEMS_PER_SERVER, serverRestores.length);
+        
+        restoreRows.push(`
+            <tr class="group-row">
+                <td colspan="7"><span class="group-label">${escapeHtml(serverName)}</span></td>
+            </tr>
+        `);
+
+        restoreRows.push(serverRestores.slice(0, showCount).map(restore => `
             <tr>
                 <td>${parseInt(restore.id)}</td>
                 <td>${parseInt(restore.backup_id)}</td>
-                <td>Server #${parseInt(restore.ldap_server_id)}</td>
+                <td>${escapeHtml(serverName)}</td>
                 <td>
                     <!-- Note: status is a backend enum value (pending|in_progress|completed|failed), safe for use in CSS class -->
                     <span class="status-badge status-${restore.status.replace('_', '-')}">
@@ -602,11 +1037,128 @@ async function loadRestores() {
                 <td>${new Date(restore.created_at).toLocaleString()}</td>
                 <td class="action-cell">-</td>
             </tr>
-        `).join('');
+        `).join(''));
+        
+        // Add "Load More" button row if there are more restores
+        if (serverRestores.length > ITEMS_PER_SERVER) {
+            restoreRows.push(`
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 10px;">
+                        <button class="btn btn-secondary" data-server-id="${serverRestores[0].ldap_server_id}" onclick="viewServerRestores(this.dataset.serverId, '${escapeHtml(serverName).replace(/'/g, "&#39;")}')">View All (${serverRestores.length} total)</button>
+                    </td>
+                </tr>
+            `);
+        }
+    });
+
+    tbody.innerHTML = restoreRows.join('');
+}
+
+async function viewServerRestores(serverId, displayServerName) {
+    // Parse serverId as integer
+    serverId = parseInt(serverId);
+    
+    // Create and show modal with all restores for the selected server
+    let modal = document.getElementById('serverRestoresModal');
+    
+    if (!modal) {
+        // Create modal if it doesn't exist
+        modal = document.createElement('div');
+        modal.id = 'serverRestoresModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2 id="serverRestoresTitle"></h2>
+                    <span class="close" onclick="closeServerRestoresModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <table id="serverRestoresTable" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Backup ID</th>
+                                <th>Status</th>
+                                <th>Entries Restored</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="serverRestoresTbody"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeServerRestoresModal()">Close</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    // Show modal
+    modal.style.display = 'block';
+    modal.style.zIndex = '1500';  // Set z-index higher than default modals
+    document.getElementById('serverRestoresTitle').textContent = `All Restore Jobs for ${escapeHtml(displayServerName)}`;
+    
+    // Show loading state
+    const tbody = document.getElementById('serverRestoresTbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">Loading...</td></tr>';
+    
+    // Fetch restores for this server
+    try {
+        const response = await fetch(`${API_URL}/restores/?skip=0&limit=1000`, {
+            headers: authHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch restores: ${response.status}`);
+        }
+        
+        const restores = await response.json();
+        
+        // Filter restores for this server by ID
+        const filteredRestores = restores.filter(restore => parseInt(restore.ldap_server_id) === serverId);
+        
+        console.log(`Loaded ${restores.length} restores total, ${filteredRestores.length} for server ${serverId}`);
+        
+        // Render restores in modal
+        if (filteredRestores.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-secondary);">No restore jobs found for this server</td></tr>';
+        } else {
+            tbody.innerHTML = filteredRestores.map(restore => `
+                <tr>
+                    <td>${parseInt(restore.id)}</td>
+                    <td>${parseInt(restore.backup_id)}</td>
+                    <td>
+                        <span class="status-badge status-${restore.status.replace('_', '-')}">
+                            ${escapeHtml(restore.status)}
+                        </span>
+                    </td>
+                    <td>${restore.entries_restored ? parseInt(restore.entries_restored) : 'N/A'}</td>
+                    <td>${new Date(restore.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
     } catch (error) {
         console.error('Error loading restores:', error);
+        showError(`Error loading restores for ${escapeHtml(displayServerName)}: ${error.message}`);
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--danger-color);">Error loading restores: ${escapeHtml(error.message)}</td></tr>`;
     }
 }
+
+function closeServerRestoresModal() {
+    const modal = document.getElementById('serverRestoresModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Close modal when clicking outside of it
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('serverRestoresModal');
+    if (modal && event.target === modal) {
+        modal.style.display = 'none';
+    }
+});
 
 // Load scheduled backups
 async function loadScheduled() {
@@ -638,7 +1190,11 @@ async function loadScheduled() {
                         ${schedule.is_active ? 'Active' : 'Inactive'}
                     </span>
                 </td>
-                <td class="action-cell">-</td>
+                <td class="action-cell">
+                    <button class="btn btn-secondary btn-sm" onclick="runScheduleNow(${parseInt(schedule.id)}, '${escapeHtml(schedule.name)}')">Run now</button>
+                    <button class="btn btn-info btn-sm" onclick="showEditScheduleModal(${parseInt(schedule.id)})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSchedule(${parseInt(schedule.id)}, '${escapeHtml(schedule.name)}')">Delete</button>
+                </td>
             </tr>
         `).join('');
     } catch (error) {
@@ -738,6 +1294,147 @@ async function handleAddServer(event) {
     } catch (error) {
         console.error('Add server error:', error);
         showToast('error', error.message || 'Failed to add LDAP server');
+    }
+}
+
+async function showEditServerModal(serverId) {
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers/${serverId}`, {
+            headers: authHeaders()
+        });
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            
+            if (contentType.includes('application/json')) {
+                try {
+                    const data = await response.json();
+                    errorMessage = data.detail || errorMessage;
+                } catch (e) {
+                    // JSON parse failed
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+        const server = await response.json();
+        
+        // Populate form fields
+        document.getElementById('editServerId').value = server.id;
+        document.getElementById('editServerName').value = server.name;
+        document.getElementById('editServerHost').value = server.host;
+        document.getElementById('editServerPort').value = server.port;
+        document.getElementById('editServerUseSSL').checked = server.use_ssl;
+        document.getElementById('editServerBaseDN').value = server.base_dn;
+        document.getElementById('editServerBindDN').value = server.bind_dn || '';
+        // Don't populate password - leave empty for security
+        document.getElementById('editServerPassword').value = '';
+        document.getElementById('editServerActive').checked = server.is_active;
+        document.getElementById('editServerDescription').value = server.description || '';
+        
+        // Show modal
+        const modal = document.getElementById('editServerModal');
+        if (modal) {
+            modal.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading server:', error);
+        showToast('error', `Failed to load server details: ${error.message}`);
+    }
+}
+
+function closeEditServerModal() {
+    const modal = document.getElementById('editServerModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function handleEditServer(event) {
+    event.preventDefault();
+    
+    const serverId = document.getElementById('editServerId').value;
+    const serverData = {
+        name: document.getElementById('editServerName').value,
+        host: document.getElementById('editServerHost').value,
+        port: parseInt(document.getElementById('editServerPort').value),
+        use_ssl: document.getElementById('editServerUseSSL').checked,
+        base_dn: document.getElementById('editServerBaseDN').value,
+        bind_dn: document.getElementById('editServerBindDN').value,
+        is_active: document.getElementById('editServerActive').checked,
+        description: document.getElementById('editServerDescription').value
+    };
+    
+    // Only include password if it's not empty
+    const password = document.getElementById('editServerPassword').value;
+    if (password) {
+        serverData.bind_password = password;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers/${serverId}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(serverData)
+        });
+        
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let errorMessage = `Failed to update LDAP server (HTTP ${response.status})`;
+            
+            if (contentType.includes('application/json')) {
+                try {
+                    const data = await response.json();
+                    errorMessage = data.detail || errorMessage;
+                } catch (e) {
+                    // If JSON parsing fails, use default message
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+        
+        showToast('success', 'LDAP server updated successfully');
+        closeEditServerModal();
+        await loadServers();
+    } catch (error) {
+        console.error('Edit server error:', error);
+        showToast('error', error.message || 'Failed to update LDAP server');
+    }
+}
+
+async function deleteServer(serverId, serverName) {
+    if (!confirm(`Are you sure you want to delete the LDAP server "${serverName}"? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/ldap-servers/${serverId}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let errorMessage = `Failed to delete LDAP server (HTTP ${response.status})`;
+            
+            if (contentType.includes('application/json')) {
+                try {
+                    const data = await response.json();
+                    errorMessage = data.detail || errorMessage;
+                } catch (e) {
+                    // If JSON parsing fails, use default message
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+
+        showToast('success', `LDAP server "${serverName}" deleted successfully`);
+        await loadServers();
+    } catch (error) {
+        console.error('Delete server error:', error);
+        showToast('error', error.message || 'Failed to delete LDAP server');
     }
 }
 
@@ -901,7 +1598,81 @@ function showScheduleModal() {
     if (modal) {
         modal.style.display = 'block';
     }
+    const statusGroup = document.getElementById('scheduleStatusGroup');
+    if (statusGroup) {
+        statusGroup.style.display = 'none';
+    }
+    const scheduleId = document.getElementById('scheduleId');
+    if (scheduleId) {
+        scheduleId.value = '';
+    }
+    const title = document.getElementById('scheduleModalTitle');
+    if (title) {
+        title.textContent = 'Schedule Backup';
+    }
+    const submit = document.getElementById('createScheduleSubmit');
+    if (submit) {
+        submit.textContent = 'Create Schedule';
+    }
+    const serverSelect = document.getElementById('scheduleServerId');
+    if (serverSelect) {
+        serverSelect.disabled = false;
+    }
     loadServerOptions('scheduleServerId');
+}
+
+async function showEditScheduleModal(scheduleId) {
+    try {
+        const response = await fetch(`${API_URL}/scheduled-backups/${parseInt(scheduleId)}`, {
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let errorMessage = `Failed to load schedule (HTTP ${response.status})`;
+
+            if (contentType.includes('application/json')) {
+                const data = await response.json();
+                errorMessage = data.detail || errorMessage;
+            }
+
+            throw new Error(errorMessage);
+        }
+
+        const schedule = await response.json();
+        const modal = document.getElementById('createScheduleModal');
+        if (modal) {
+            modal.style.display = 'block';
+        }
+
+        await loadServerOptions('scheduleServerId', schedule.ldap_server_id);
+        document.getElementById('scheduleId').value = schedule.id;
+        document.getElementById('scheduleName').value = schedule.name;
+        document.getElementById('scheduleType').value = schedule.backup_type;
+        document.getElementById('scheduleCron').value = schedule.cron_expression;
+        document.getElementById('scheduleRetention').value = schedule.retention_days;
+        document.getElementById('scheduleIsActive').checked = schedule.is_active;
+
+        const statusGroup = document.getElementById('scheduleStatusGroup');
+        if (statusGroup) {
+            statusGroup.style.display = 'block';
+        }
+        const title = document.getElementById('scheduleModalTitle');
+        if (title) {
+            title.textContent = 'Edit Schedule';
+        }
+        const submit = document.getElementById('createScheduleSubmit');
+        if (submit) {
+            submit.textContent = 'Save Changes';
+        }
+        const serverSelect = document.getElementById('scheduleServerId');
+        if (serverSelect) {
+            serverSelect.disabled = true;
+        }
+    } catch (error) {
+        console.error('Error loading schedule:', error);
+        showToast('error', error.message || 'Failed to load schedule');
+    }
 }
 
 function closeCreateScheduleModal() {
@@ -913,16 +1684,26 @@ function closeCreateScheduleModal() {
     if (form) {
         form.reset();
     }
+    const statusGroup = document.getElementById('scheduleStatusGroup');
+    if (statusGroup) {
+        statusGroup.style.display = 'none';
+    }
+    const serverSelect = document.getElementById('scheduleServerId');
+    if (serverSelect) {
+        serverSelect.disabled = false;
+    }
 }
 
 async function handleCreateSchedule(event) {
     event.preventDefault();
 
+    const scheduleId = document.getElementById('scheduleId').value;
     const name = document.getElementById('scheduleName').value.trim();
     const serverId = document.getElementById('scheduleServerId').value;
     const backupType = document.getElementById('scheduleType').value;
     const cronExpression = document.getElementById('scheduleCron').value.trim();
     const retention = document.getElementById('scheduleRetention').value;
+    const isActive = document.getElementById('scheduleIsActive').checked;
 
     if (!name || !serverId || !cronExpression) {
         showToast('error', 'Please fill in required fields (Name, Server, Cron)');
@@ -931,18 +1712,28 @@ async function handleCreateSchedule(event) {
 
     const payload = {
         name,
-        ldap_server_id: parseInt(serverId),
         backup_type: backupType,
         cron_expression: cronExpression,
         retention_days: parseInt(retention || '30')
     };
 
+    if (scheduleId) {
+        payload.is_active = isActive;
+    } else {
+        payload.ldap_server_id = parseInt(serverId);
+    }
+
     try {
-        const response = await fetch(`${API_URL}/scheduled-backups/`, {
-            method: 'POST',
+        const response = await fetch(
+            scheduleId
+                ? `${API_URL}/scheduled-backups/${parseInt(scheduleId)}`
+                : `${API_URL}/scheduled-backups/`,
+            {
+                method: scheduleId ? 'PUT' : 'POST',
             headers: authHeaders(),
             body: JSON.stringify(payload)
-        });
+            }
+        );
 
         const contentType = response.headers.get('content-type') || '';
         const data = contentType.includes('application/json')
@@ -958,12 +1749,72 @@ async function handleCreateSchedule(event) {
             throw new Error(message);
         }
 
-        showToast('success', 'Schedule created successfully');
+        showToast('success', scheduleId ? 'Schedule updated successfully' : 'Schedule created successfully');
         closeCreateScheduleModal();
         await loadScheduled();
     } catch (error) {
         console.error('Create schedule error:', error);
-        showToast('error', error.message || 'Failed to create schedule');
+        showToast('error', error.message || (scheduleId ? 'Failed to update schedule' : 'Failed to create schedule'));
+    }
+}
+
+async function deleteSchedule(scheduleId, scheduleName) {
+    if (!confirm(`Are you sure you want to delete the schedule "${scheduleName}"?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/scheduled-backups/${parseInt(scheduleId)}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let errorMessage = `Failed to delete schedule (HTTP ${response.status})`;
+
+            if (contentType.includes('application/json')) {
+                const data = await response.json();
+                errorMessage = data.detail || errorMessage;
+            }
+
+            throw new Error(errorMessage);
+        }
+
+        showToast('success', `Schedule "${scheduleName}" deleted successfully`);
+        await loadScheduled();
+    } catch (error) {
+        console.error('Delete schedule error:', error);
+        showToast('error', error.message || 'Failed to delete schedule');
+    }
+}
+
+async function runScheduleNow(scheduleId, scheduleName) {
+    try {
+        const response = await fetch(`${API_URL}/scheduled-backups/${parseInt(scheduleId)}/run`, {
+            method: 'POST',
+            headers: authHeaders()
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        if (!response.ok) {
+            const message = data && data.detail
+                ? data.detail
+                : (typeof data === 'string' && data.length > 0
+                    ? data
+                    : 'Failed to run schedule');
+            throw new Error(message);
+        }
+
+        showToast('success', `Scheduled backup "${scheduleName}" queued`);
+        await loadBackups();
+    } catch (error) {
+        console.error('Run schedule error:', error);
+        showToast('error', error.message || 'Failed to run schedule');
     }
 }
 
@@ -979,6 +1830,7 @@ function restoreBackup(backupId) {
     const modal = document.getElementById('createRestoreModal');
     if (modal) {
         modal.style.display = 'block';
+        modal.style.zIndex = '2000';  // Ensure it appears on top of other modals
     }
     loadBackupOptions('restoreBackupId', backupId);
     loadServerOptions('restoreServerId');

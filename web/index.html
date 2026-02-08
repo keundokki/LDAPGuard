@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LDAPGuard - LDAP Backup & Restore</title>
+    <title>LDAPGuard</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -118,6 +118,7 @@
                         <span id="backups-page">1</span>
                         <button class="btn btn-secondary" id="backups-next">Next</button>
                     </div>
+                    <span id="backups-refresh-status" class="refresh-status"></span>
                 </div>
                 <div class="table-container">
                     <table id="backups-table">
@@ -141,13 +142,20 @@
                         </tbody>
                     </table>
                 </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="loadMoreBackupsBtn" class="btn btn-secondary" onclick="loadMoreBackups()" style="display:none;">Load More</button>
+                </div>
             </div>
 
+            <!-- Server Backups Tab -->
             <!-- Restores Tab -->
             <div id="restores" class="tab-content">
                 <div class="section-header">
                     <h2>Restore Jobs</h2>
                     <button id="createRestoreBtn" class="btn btn-primary" onclick="showCreateRestoreModal()">+ Create Restore</button>
+                </div>
+                <div class="table-controls">
+                    <span id="restores-refresh-status" class="refresh-status"></span>
                 </div>
                 <div class="table-container">
                     <table id="restores-table">
@@ -168,6 +176,9 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="loadMoreRestoresBtn" class="btn btn-secondary" onclick="loadMoreRestores()" style="display:none;">Load More</button>
                 </div>
             </div>
 
@@ -473,6 +484,84 @@
         </div>
     </div>
 
+    <!-- Backup Content Modal -->
+    <div id="backupContentModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeBackupContentModal()">&times;</span>
+            <h2>Backup Content</h2>
+            <p id="backupContentMeta" class="help-text">Loading...</p>
+            <pre id="backupContentBody" class="backup-content"></pre>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBackupContentModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Server Modal -->
+    <div id="editServerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditServerModal()">&times;</span>
+            <h2>Edit LDAP Server</h2>
+            <form id="editServerForm" onsubmit="handleEditServer(event)">
+                <input type="hidden" id="editServerId">
+                
+                <div class="form-group">
+                    <label for="editServerName">Server Name *</label>
+                    <input type="text" id="editServerName" required placeholder="e.g., Production LDAP">
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerHost">LDAP Host/URL *</label>
+                    <input type="text" id="editServerHost" required placeholder="e.g., ldap.example.com or ldapguard-openldap">
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerPort">Port *</label>
+                    <input type="number" id="editServerPort" required placeholder="389 or 636" min="1" max="65535">
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="editServerUseSSL">
+                        Use SSL/TLS (LDAPS)
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerBaseDN">Base DN *</label>
+                    <input type="text" id="editServerBaseDN" required placeholder="e.g., dc=example,dc=com">
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerBindDN">Bind DN (optional)</label>
+                    <input type="text" id="editServerBindDN" placeholder="e.g., cn=admin,dc=example,dc=com">
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerPassword">Bind Password (leave empty to keep current) *</label>
+                    <input type="password" id="editServerPassword" placeholder="Enter new password or leave blank">
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="editServerActive">
+                        Active
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="editServerDescription">Description (optional)</label>
+                    <textarea id="editServerDescription" placeholder="Notes about this server"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditServerModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Create Restore Modal -->
     <div id="createRestoreModal" class="modal">
         <div class="modal-content">
@@ -554,6 +643,13 @@
                 <div class="form-group">
                     <label for="scheduleRetention">Retention Days</label>
                     <input type="number" id="scheduleRetention" value="30" min="1">
+                </div>
+
+                <div class="form-group" id="scheduleStatusGroup" style="display: none;">
+                    <label>
+                        <input type="checkbox" id="scheduleIsActive">
+                        Active
+                    </label>
                 </div>
 
                 <div class="form-actions">

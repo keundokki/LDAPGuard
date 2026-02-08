@@ -74,7 +74,9 @@ class LDAPServer(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    backups = relationship("Backup", back_populates="ldap_server")
+    backups = relationship("Backup", back_populates="ldap_server", cascade="all, delete-orphan")
+    scheduled_backups = relationship("ScheduledBackup", back_populates="ldap_server", cascade="all, delete-orphan")
+    restore_jobs = relationship("RestoreJob", back_populates="ldap_server", cascade="all, delete-orphan")
 
 
 class Backup(Base):
@@ -135,6 +137,9 @@ class RestoreJob(Base):
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Relationships
+    ldap_server = relationship("LDAPServer", back_populates="restore_jobs")
+
 
 class ScheduledBackup(Base):
     __tablename__ = "scheduled_backups"
@@ -152,6 +157,9 @@ class ScheduledBackup(Base):
     retention_days = Column(Integer, default=30, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    ldap_server = relationship("LDAPServer", back_populates="scheduled_backups")
 
 
 class AuditLog(Base):

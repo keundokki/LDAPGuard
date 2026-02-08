@@ -43,31 +43,57 @@ class WorkerService:
             logger.error(f"Failed to connect to Redis: {e}")
 
     async def load_scheduled_backups(self):
-        """Load scheduled backups from database and add to scheduler."""
+        """Load scheduled backups from database and sync scheduler jobs."""
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(ScheduledBackup).where(ScheduledBackup.is_active)
             )
             scheduled_backups = result.scalars().all()
 
-            for scheduled_backup in scheduled_backups:
-                try:
-                    # Add job to scheduler
-                    self.scheduler.add_job(
-                        self.execute_scheduled_backup,
-                        CronTrigger.from_crontab(scheduled_backup.cron_expression),
-                        args=[scheduled_backup.id],
-                        id=f"scheduled_backup_{scheduled_backup.id}",
-                        replace_existing=True,
-                    )
-                    logger.info(
-                        f"Added scheduled backup: {scheduled_backup.name} "
-                        f"(cron: {scheduled_backup.cron_expression})"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to add scheduled backup {scheduled_backup.id}: {e}"
-                    )
+        logger.info(f"Found {len(scheduled_backups)} active scheduled backups in database")
+
+        active_ids = {schedule.id for schedule in scheduled_backups}
+
+        for scheduled_backup in scheduled_backups:
+            try:
+                logger.info(
+                    f"Adding scheduled backup: {scheduled_backup.name} "
+                    f"(id: {scheduled_backup.id}, cron: {scheduled_backup.cron_expression})"
+                )
+                # Add or update scheduled job
+                self.scheduler.add_job(
+                    self.execute_scheduled_backup,
+                    CronTrigger.from_crontab(scheduled_backup.cron_expression),
+                    args=[scheduled_backup.id],
+                    id=f"scheduled_backup_{scheduled_backup.id}",
+                    replace_existing=True,
+                )
+                logger.info(
+                    f"Successfully added scheduled backup: {scheduled_backup.name} "
+                    f"(cron: {scheduled_backup.cron_expression})"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to add scheduled backup {scheduled_backup.id}: {e}", exc_info=True
+                )
+
+        # Remove jobs that no longer exist or were deactivated
+        for job in self.scheduler.get_jobs():
+            if not job.id.startswith("scheduled_backup_"):
+                continue
+            try:
+                schedule_id = int(job.id.replace("scheduled_backup_", ""))
+            except ValueError:
+                continue
+            if schedule_id not in active_ids:
+                self.scheduler.remove_job(job.id)
+                logger.info(f"Removed scheduled backup job {job.id}")
+
+        # Log all current jobs
+        all_jobs = self.scheduler.get_jobs()
+        logger.info(f"Scheduler now has {len(all_jobs)} total jobs")
+        for job in all_jobs:
+            logger.info(f"  - Job ID: {job.id}, Next run scheduled")
 
     async def execute_scheduled_backup(self, scheduled_backup_id: int):
         """Execute a scheduled backup."""
@@ -86,6 +112,18 @@ class WorkerService:
                 )
                 return
 
+            # Get a valid user to attribute the backup to
+            # For automatic scheduled backups, we use the first available user
+            from api.models.models import User
+            logger.info("Querying for available users")
+            result = await db.execute(select(User))
+            user = result.scalars().first()
+            logger.info(f"Found user: {user.id if user else 'None'}")
+            
+            if not user:
+                logger.error("No users found in database, cannot create scheduled backup")
+                return
+
             # Create backup record
             new_backup = Backup(
                 ldap_server_id=scheduled_backup.ldap_server_id,
@@ -93,7 +131,7 @@ class WorkerService:
                 encrypted=True,
                 compression_enabled=True,
                 status=BackupStatus.PENDING,
-                created_by=1,  # System user
+                created_by=user.id,  # Use the first available user
             )
 
             db.add(new_backup)
@@ -109,12 +147,29 @@ class WorkerService:
             return
 
         try:
-            # Check for pending backup jobs
+            # Check for pending backup jobs from Redis
             backup_id = await self.redis_client.lpop("backup_queue")
 
             if backup_id:
                 logger.info(f"Processing backup {backup_id} from queue")
                 await perform_backup(int(backup_id))
+                return
+
+            # Fallback: process oldest pending backup from DB
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Backup)
+                    .where(Backup.status == BackupStatus.PENDING)
+                    .order_by(Backup.created_at.asc())
+                    .limit(1)
+                )
+                pending_backup = result.scalar_one_or_none()
+
+            if pending_backup:
+                logger.info(
+                    f"Processing pending backup {pending_backup.id} from database"
+                )
+                await perform_backup(pending_backup.id)
         except Exception as e:
             logger.error(f"Error processing backup queue: {e}")
 
@@ -150,11 +205,20 @@ class WorkerService:
         # Load scheduled backups
         await self.load_scheduled_backups()
 
+        # Refresh scheduled backups periodically to pick up changes
+        self.scheduler.add_job(
+            self.load_scheduled_backups,
+            "interval",
+            minutes=1,
+            id="refresh_schedules",
+            replace_existing=True,
+        )
+
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")
 
-        # Start queue processor
+        # Run queue processor and keep the service alive
         await self.queue_processor_loop()
 
     async def stop(self):

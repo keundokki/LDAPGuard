@@ -16,9 +16,8 @@ async def get_redis_client() -> redis.Redis:
 
     if _redis_client is None:
         try:
-            _redis_client = await redis.from_url(
-                settings.REDIS_URL, decode_responses=True
-            )
+            _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await _redis_client.ping()
             logger.info("Redis connection established")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
@@ -32,6 +31,6 @@ async def close_redis_client():
     global _redis_client
 
     if _redis_client:
-        await _redis_client.close()
+        await _redis_client.aclose()
         _redis_client = None
         logger.info("Redis connection closed")

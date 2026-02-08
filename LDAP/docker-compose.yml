@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: ldapguard-openldap
+    ports:
+      - "3389:389"
+      - "6363:636"
+    environment:
+      LDAP_ORGANISATION: "Example Corp"
+      LDAP_DOMAIN: "example.com"
+      LDAP_BASE_DN: "dc=example,dc=com"
+      LDAP_ADMIN_PASSWORD: "admin_password"
+      LDAP_CONFIG_PASSWORD: "config_password"
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: "readonly"
+      LDAP_READONLY_USER_PASSWORD: "readonly_password"
+      LDAP_TLS_CRT_FILENAME: "ldap.crt"
+      LDAP_TLS_KEY_FILENAME: "ldap.key"
+      LDAP_TLS_Ca_CRT_FILENAME: "ca.crt"
+      LDAP_TLS_ENFORCE: "false"
+      LDAP_TLS_VERIFY_CLIENT: "never"
+    volumes:
+      - ./ldap-data:/var/lib/ldap
+      - ./ldap-config:/etc/ldap/slapd.d
+      - ./ldap-certs:/container/service/slapd/assets/certs
+    networks:
+      - ldapguard-net
+
+  ldap-init:
+    image: osixia/openldap:1.5.0
+    container_name: ldapguard-ldap-init
+    depends_on:
+      - openldap
+    environment:
+      LDAP_HOST: "openldap"
+      LDAP_PORT: 389
+      LDAP_ADMIN_PASSWORD: "admin_password"
+    volumes:
+      - ./init-ldap.sh:/init-ldap.sh:ro
+      - ./init-test-data.ldif:/ldap-data/init-test-data.ldif:ro
+    entrypoint: ["/bin/bash", "-c", "sleep 15 && /init-ldap.sh"]
+    networks:
+      - ldapguard-net
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: ldapguard-phpldapadmin
+    ports:
+      - "6680:443"
+    environment:
+      PHPLDAPADMIN_HTTPS: "true"
+      PHPLDAPADMIN_LDAP_HOSTS: "openldap"
+      PHPLDAPADMIN_LDAP_CLIENT_ADD_SERVERS: "true"
+    depends_on:
+      - openldap
+    networks:
+      - ldapguard-net
+
+networks:
+  ldapguard-net:
+    driver: bridge
+    external: true
+

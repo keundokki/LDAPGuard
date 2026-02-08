@@ -242,6 +242,33 @@ header h1 {
     text-align: center;
 }
 
+.refresh-status {
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+
+.table-controls .refresh-status {
+    margin-left: auto;
+}
+
+.modal-large {
+    max-width: 900px;
+}
+
+.backup-content {
+    background: #0f172a;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-family: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 16px;
+    white-space: pre-wrap;
+}
+
 .btn {
     padding: 10px 20px;
     border: none;
@@ -281,8 +308,52 @@ header h1 {
     justify-content: flex-start;
 }
 
+.action-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.action-menu summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.action-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.action-menu-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 1600;
+    min-width: 140px;
+}
+
+.action-menu:not([open]) .action-menu-list {
+    display: none;
+}
+
 .table-container {
     overflow-x: auto;
+}
+
+.group-row td {
+    background: rgba(15, 23, 42, 0.06);
+    font-weight: 600;
+    padding: 10px 12px;
+}
+
+.group-label {
+    color: var(--text-primary);
 }
 
 .toast-container {
@@ -659,4 +730,51 @@ footer a:hover {
 .badge-danger {
     background-color: #dc2626;
     color: white;
+}
+/* Modal Header, Body, Footer Styles */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 16px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 1.5em;
+}
+
+.modal-body {
+    margin-bottom: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.modal-body table {
+    margin-top: 10px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-footer .btn {
+    padding: 10px 20px;
+    font-size: 0.95em;
+}
+
+/* Adjust modal-large for better width */
+.modal-large {
+    max-width: 900px;
+}
+
+.modal-content.modal-large {
+    max-width: 900px;
 }
