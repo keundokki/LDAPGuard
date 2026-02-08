@@ -23,7 +23,17 @@ spec:
       middlewares:
         - name: ldapguard-security-headers
   tls:
-    certResolver: {{ .Values.ingress.certResolver }}
+    {{- if .Values.ingress.tls.secretName }}
+    # Use existing TLS secret (e.g., Cloudflare Origin Certificate)
+    secretName: {{ .Values.ingress.tls.secretName }}
+    {{- else if .Values.ingress.tls.certResolver }}
+    # Use Traefik's ACME cert resolver (Let's Encrypt or Cloudflare DNS)
+    certResolver: {{ .Values.ingress.tls.certResolver }}
+    {{- if .Values.ingress.tls.domains }}
+    domains:
+      {{- toYaml .Values.ingress.tls.domains | nindent 6 }}
+    {{- end }}
+    {{- end }}
 ---
 # HTTP to HTTPS redirect
 apiVersion: traefik.io/v1alpha1

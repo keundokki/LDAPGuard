@@ -12,7 +12,9 @@ A Helm chart for deploying LDAPGuard - LDAP backup and restore system - on Kuber
 
 ### 1. Create Secrets
 
-Before deployment, create the required secrets manually:
+**Option A: Manual Secret Creation (Recommended for Production)**
+
+Create secrets manually before deployment:
 
 ```bash
 kubectl create namespace ldapguard
@@ -26,6 +28,33 @@ kubectl create secret generic ldapguard-secrets \
 ```
 
 **Important:** Replace `REPLACE_WITH_POSTGRES_PASSWORD` in the DATABASE_URL with the actual password shown from the first command.
+
+**Option B: Using values.yaml (Development/Testing Only)**
+
+⚠️ **NOT RECOMMENDED for production** - secrets will be stored in values.yaml/Git
+
+Edit `helm/values.yaml`:
+
+```yaml
+secrets:
+  create: true  # Enable Helm to create the secret
+  values:
+    POSTGRES_PASSWORD: "your-postgres-password"
+    SECRET_KEY: "your-secret-key-min-32-chars"
+    ENCRYPTION_KEY: "your-encryption-key-min-32-chars"
+    DATABASE_URL: "postgresql+asyncpg://ldapguard:your-postgres-password@postgres:5432/ldapguard"
+```
+
+Or pass via command line:
+
+```bash
+helm install ldapguard ./helm -n ldapguard \
+  --set secrets.create=true \
+  --set secrets.values.POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --set secrets.values.SECRET_KEY="$(openssl rand -base64 32)" \
+  --set secrets.values.ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --set secrets.values.DATABASE_URL="postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard"
+```
 
 ### 2. Deploy with kubectl
 
@@ -152,7 +181,11 @@ postgres:
 ingress:
   enabled: true
   domain: "ldapguard.mycompany.com"
-  certResolver: "letsencrypt-prod"
+  tls:
+    certResolver: "letsencrypt"  # or "cloudflare" for Cloudflare DNS
+    # Or use Cloudflare Origin Certificate:
+    # secretName: "cloudflare-origin-cert"
+    # certResolver: ""
 
 backup:
   enabled: true
@@ -261,8 +294,50 @@ config:
 ingress:
   enabled: false
   domain: ldapguard.example.com
-  certResolver: letsencrypt
+  
+  tls:
+    # Option 1: Use ACME cert resolver (Let's Encrypt or Cloudflare DNS)
+    certResolver: letsencrypt  # or 'cloudflare'
+    
+    # Option 2: Use existing TLS secret (Cloudflare Origin Certificate)
+    secretName: ""  # e.g., "cloudflare-origin-cert"
+    
+    # Optional: Additional domains (SANs)
+    # domains:
+    #   - main: ldapguard.example.com
+    #     sans:
+    #       - "*.example.com"
+  
   annotations: {}
+```
+
+**Cloudflare SSL/TLS:**
+
+For detailed Cloudflare configuration (DNS challenge, Origin Certificates), see:
+📘 **[Cloudflare SSL Configuration Guide](../docs/CLOUDFLARE_SSL.md)**
+
+Quick examples:
+
+**Cloudflare DNS + Let's Encrypt:**
+```yaml
+ingress:
+  enabled: true
+  domain: ldapguard.yourdomain.com
+  tls:
+    certResolver: cloudflare  # Requires Traefik configured with Cloudflare DNS
+```
+
+**Cloudflare Origin Certificate:**
+```bash
+# Create secret first
+kubectl create secret tls cloudflare-origin-cert \
+  --cert=origin-cert.pem --key=origin-key.pem -n ldapguard
+
+# Then deploy
+helm install ldapguard ./helm \
+  --set ingress.enabled=true \
+  --set ingress.tls.secretName=cloudflare-origin-cert \
+  --set ingress.tls.certResolver=""
 ```
 
 ### Network Policy
@@ -276,16 +351,39 @@ networkPolicy:
 
 ### Secrets Management
 
-**Secrets are NOT managed by this Helm chart.** You must create secrets manually before deployment:
+**Two options for managing secrets:**
+
+**Option 1: Manual Creation (Recommended for Production)**
+
+Create secrets manually using kubectl before deployment:
 
 1. **Never commit secrets to Git**
 2. **Create secrets using kubectl** (see Quick Start above)
 3. **Secret name must be:** `ldapguard-secrets`
 4. **Required secret keys:**
    - `POSTGRES_PASSWORD` - PostgreSQL password
-   - `SECRET_KEY` - JWT token signing key
-   - `ENCRYPTION_KEY` - LDAP password encryption key
+   - `SECRET_KEY` - JWT token signing key (min 32 chars)
+   - `ENCRYPTION_KEY` - LDAP password encryption key (min 32 chars)
    - `DATABASE_URL` - Full PostgreSQL connection string
+
+**Option 2: Helm-Managed Secrets (Development/Testing Only)**
+
+⚠️ **NOT RECOMMENDED for production** - Enable Helm to create secrets from values:
+
+```yaml
+secrets:
+  create: true
+  values:
+    POSTGRES_PASSWORD: "your-password"
+    SECRET_KEY: "your-secret-key"
+    ENCRYPTION_KEY: "your-encryption-key"
+    DATABASE_URL: "postgresql+asyncpg://ldapguard:your-password@postgres:5432/ldapguard"
+```
+
+**Security Warning:** If you use Option 2, ensure:
+- Values file is NOT committed to Git
+- Use `.gitignore` or separate values file for secrets
+- Consider using Sealed Secrets, External Secrets Operator, or similar for GitOps workflows
 
 ### Worker Replicas
 

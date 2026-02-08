@@ -52,6 +52,12 @@ dump.rdb
 # Kubernetes - user-specific customizations (if copying patches locally)
 k8s/patches/custom-*.yaml
 
+# Helm - values files with secrets
+helm/values-*.yaml
+helm/my-values.yaml
+helm/*-secrets.yaml
+helm/secrets.yaml
+
 # OS
 .DS_Store
 Thumbs.db

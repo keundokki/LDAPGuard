@@ -109,34 +109,61 @@ backup:
     accessMode: ReadWriteMany
 
 # Secrets configuration
-# IMPORTANT: Create secrets manually before deployment:
-# kubectl create secret generic ldapguard-secrets \
-#   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
-#   --from-literal=SECRET_KEY="$(openssl rand -base64 32)" \
-#   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-#   --from-literal=DATABASE_URL="postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard" \
-#   -n ldapguard
 secrets:
-  # Name of the secret (must match the one you create)
+  # Name of the secret
   name: ldapguard-secrets
-  # If you want Helm to create the secret (NOT RECOMMENDED for production)
-  # create: false
-  # values:
-  #   POSTGRES_PASSWORD: ""
-  #   SECRET_KEY: ""
-  #   ENCRYPTION_KEY: ""
-  #   DATABASE_URL: ""
+  
+  # Create secret from values below (NOT RECOMMENDED for production)
+  # For production, set create: false and create secret manually:
+  # kubectl create secret generic ldapguard-secrets \
+  #   --from-literal=POSTGRES_PASSWORD="..." \
+  #   --from-literal=SECRET_KEY="..." \
+  #   --from-literal=ENCRYPTION_KEY="..." \
+  #   --from-literal=DATABASE_URL="..." \
+  #   -n ldapguard
+  create: false
+  
+  # Secret values (only used if create: true)
+  # WARNING: Do not commit real secrets to Git!
+  values:
+    # PostgreSQL password (generate with: openssl rand -base64 24)
+    POSTGRES_PASSWORD: ""
+    
+    # JWT token secret key (generate with: openssl rand -base64 32)
+    SECRET_KEY: ""
+    
+    # AES-256 encryption key for LDAP passwords (generate with: openssl rand -base64 32)
+    ENCRYPTION_KEY: ""
+    
+    # Database connection URL
+    # Replace PASSWORD with the POSTGRES_PASSWORD value above
+    DATABASE_URL: "postgresql+asyncpg://ldapguard:PASSWORD@postgres:5432/ldapguard"
 
 # Ingress configuration (Traefik)
 ingress:
   enabled: false
   # Domain for your LDAPGuard instance
   domain: ldapguard.example.com
-  # TLS certificate resolver (for Let's Encrypt)
-  certResolver: letsencrypt
+  
+  # TLS Configuration
+  tls:
+    # Option 1: Use Traefik's ACME cert resolver (Let's Encrypt)
+    # Set certResolver AND leave secretName empty
+    certResolver: letsencrypt  # or 'cloudflare' if using Cloudflare DNS challenge
+    
+    # Option 2: Use existing TLS secret (e.g., Cloudflare Origin Certificate)
+    # Set secretName AND leave certResolver empty
+    secretName: ""  # e.g., "cloudflare-origin-cert"
+    
+    # Optional: Additional domains for certificate (SANs)
+    # domains:
+    #   - main: ldapguard.example.com
+    #     sans:
+    #       - "*.example.com"
+  
   # Annotations (optional)
   annotations: {}
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # For Cloudflare: Set SSL/TLS mode to "Full (strict)" in Cloudflare dashboard
 
 # Network Policy
 networkPolicy:

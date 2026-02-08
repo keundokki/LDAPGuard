@@ -401,6 +401,18 @@ kubectl apply -f k8s/examples/patches/resource-limits.yaml
 - Password: `changeme123!`
 - ⚠️ **Change immediately after first login!**
 
+**SSL/TLS with Cloudflare:**
+- Supports Let's Encrypt (ACME), Cloudflare Origin Certificates, and Cloudflare DNS challenge
+- 📘 **Complete guide:** [docs/CLOUDFLARE_SSL.md](docs/CLOUDFLARE_SSL.md)
+- Quick setup with Cloudflare DNS:
+  ```yaml
+  ingress:
+    enabled: true
+    domain: ldapguard.yourdomain.com
+    tls:
+      certResolver: cloudflare
+  ```
+
 ### Monitoring in Kubernetes
 
 **Prometheus Metrics:**

@@ -1,0 +1,39 @@
+# Cloudflare Origin Certificate Patch
+# 
+# This example shows how to use Cloudflare Origin Certificates instead of Let's Encrypt.
+# 
+# Prerequisites:
+# 1. Generate Origin Certificate in Cloudflare Dashboard (SSL/TLS → Origin Server)
+# 2. Create secret:
+#    kubectl create secret tls cloudflare-origin-cert \
+#      --cert=origin-cert.pem \
+#      --key=origin-key.pem \
+#      -n ldapguard
+#
+# Usage:
+# - Set ingress.enabled=true in values.yaml or via Helm parameters
+# - This will be automatically used by the ingress template
+
+# Note: Update helm/templates/ingress.yaml to support this pattern
+# Or apply this as a patch after Helm deployment:
+
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ldapguard-https
+  namespace: ldapguard
+  annotations:
+    # Cloudflare SSL mode should be "Full (strict)" in Cloudflare dashboard
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`ldapguard.yourdomain.com`)
+      kind: Rule
+      services:
+        - name: web
+          port: 80
+      middlewares:
+        - name: ldapguard-security-headers
+  tls:
+    secretName: cloudflare-origin-cert  # Use Cloudflare origin certificate
