@@ -402,13 +402,17 @@ function loadTabData(tab) {
 async function loadDashboard() {
     try {
         // Load stats
-        const [servers, backups] = await Promise.all([
+        const [servers, backups, restores] = await Promise.all([
             fetch(`${API_URL}/ldap-servers/`, { headers: authHeaders() }).then(r => {
                 if (!r.ok) throw new Error(`Failed to load servers: ${r.status} ${r.statusText}`);
                 return r.json();
             }),
-            fetch(`${API_URL}/backups/`, { headers: authHeaders() }).then(r => {
+            fetch(`${API_URL}/backups/?skip=0&limit=50`, { headers: authHeaders() }).then(r => {
                 if (!r.ok) throw new Error(`Failed to load backups: ${r.status} ${r.statusText}`);
+                return r.json();
+            }),
+            fetch(`${API_URL}/restores/?skip=0&limit=50`, { headers: authHeaders() }).then(r => {
+                if (!r.ok) throw new Error(`Failed to load restores: ${r.status} ${r.statusText}`);
                 return r.json();
             })
         ]);
@@ -425,9 +429,63 @@ async function loadDashboard() {
             const lastBackup = new Date(backups[0].created_at);
             document.getElementById('last-backup').textContent = lastBackup.toLocaleString();
         }
+
+        renderRecentActivity(backups, restores, servers);
     } catch (error) {
         console.error('Error loading dashboard:', error);
     }
+}
+
+function renderRecentActivity(backups, restores, servers) {
+    const activityEl = document.getElementById('recent-activity');
+    if (!activityEl) return;
+
+    const serverMap = new Map(servers.map(server => [parseInt(server.id), server.name]));
+
+    const activities = [
+        ...backups.map(backup => ({
+            type: 'Backup',
+            id: parseInt(backup.id),
+            serverId: parseInt(backup.ldap_server_id),
+            status: backup.status,
+            createdAt: backup.created_at,
+            detail: backup.backup_type ? `${backup.backup_type} backup` : 'Backup'
+        })),
+        ...restores.map(restore => ({
+            type: 'Restore',
+            id: parseInt(restore.id),
+            serverId: parseInt(restore.ldap_server_id),
+            status: restore.status,
+            createdAt: restore.created_at,
+            detail: `Backup #${parseInt(restore.backup_id)}`
+        }))
+    ];
+
+    const recent = activities
+        .filter(item => item.createdAt)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 8);
+
+    if (recent.length === 0) {
+        activityEl.innerHTML = '<p class="no-data">No recent activity</p>';
+        return;
+    }
+
+    activityEl.innerHTML = recent.map(item => {
+        const serverName = serverMap.get(item.serverId) || `Server #${item.serverId}`;
+        const statusClass = item.status ? `status-${item.status.replace('_', '-')}` : '';
+        return `
+            <div class="activity-item">
+                <div>
+                    <div class="activity-title">${escapeHtml(item.type)} #${item.id}   ${escapeHtml(item.detail)}</div>
+                    <div class="activity-meta">${escapeHtml(serverName)}   ${new Date(item.createdAt).toLocaleString()}</div>
+                </div>
+                ${item.status
+                    ? `<span class="status-badge ${statusClass}">${escapeHtml(item.status)}</span>`
+                    : ''}
+            </div>
+        `;
+    }).join('');
 }
 
 // Load LDAP servers
@@ -637,11 +695,12 @@ function renderBackups(backups, servers) {
                 <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
                 <td>${new Date(backup.created_at).toLocaleString()}</td>
                 <td class="action-cell">
-                    ${backup.status === 'completed' ? 
-                        `<button class="btn btn-secondary" onclick="showBackupContent(${parseInt(backup.id)})">View</button>
-                         <button class="btn btn-info" onclick="downloadBackupContent(${parseInt(backup.id)})">Download</button>
-                         <button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>` : 
-                        ''}
+                    ${backup.status === 'completed'
+                        ? `<button class="btn btn-secondary" onclick="showBackupContent(${parseInt(backup.id)})">View</button>
+                           <button class="btn btn-info" onclick="downloadBackupContent(${parseInt(backup.id)})">Download</button>
+                           <button class="btn btn-success" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>
+                           <button class="btn btn-danger" onclick="deleteBackup(${parseInt(backup.id)})">Delete</button>`
+                        : `<button class="btn btn-danger" onclick="deleteBackup(${parseInt(backup.id)})">Delete</button>`}
                 </td>
             </tr>
         `).join(''));
@@ -763,16 +822,17 @@ async function viewServerBackups(serverId, displayServerName) {
                     <td>${backup.entry_count ? parseInt(backup.entry_count) : 'N/A'}</td>
                     <td>${new Date(backup.created_at).toLocaleString()}</td>
                     <td class="action-cell">
-                        ${backup.status === 'completed' ? 
-                            `<details class="action-menu">
+                        ${backup.status === 'completed'
+                            ? `<details class="action-menu">
                                 <summary class="btn btn-secondary btn-sm">Actions</summary>
                                 <div class="action-menu-list">
                                     <button class="btn btn-secondary btn-sm" onclick="showBackupContent(${parseInt(backup.id)})">View</button>
                                     <button class="btn btn-info btn-sm" onclick="downloadBackupContent(${parseInt(backup.id)})">Download</button>
                                     <button class="btn btn-success btn-sm" onclick="restoreBackup(${parseInt(backup.id)})">Restore</button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteBackup(${parseInt(backup.id)})">Delete</button>
                                 </div>
-                            </details>` : 
-                            ''}
+                            </details>`
+                            : `<button class="btn btn-danger btn-sm" onclick="deleteBackup(${parseInt(backup.id)})">Delete</button>`}
                     </td>
                 </tr>
             `).join('');
@@ -844,6 +904,43 @@ async function batchDeleteServerBackups() {
     } catch (error) {
         showError(`Error deleting backups: ${error.message}`);
         console.error('Error:', error);
+    }
+}
+
+async function deleteBackup(backupId) {
+    const id = parseInt(backupId);
+
+    if (!Number.isFinite(id)) {
+        showToast('error', 'Invalid backup id');
+        return;
+    }
+
+    if (!confirm('Delete this backup? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/backups/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete backup');
+        }
+
+        showToast('success', `Backup #${id} deleted`);
+
+        const modal = document.getElementById('serverBackupsModal');
+        if (modal && modal.style.display === 'block') {
+            closeServerBackupsModal();
+        }
+
+        await loadBackups();
+    } catch (error) {
+        console.error('Delete backup error:', error);
+        showToast('error', error.message || 'Failed to delete backup');
     }
 }
 

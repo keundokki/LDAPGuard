@@ -210,6 +210,7 @@ class LoginRequest(BaseModel):
 class AuditLogResponse(BaseModel):
     id: int
     user_id: Optional[int]
+    username: Optional[str] = None
     action: str
     resource_type: Optional[str]
     resource_id: Optional[int]

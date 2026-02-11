@@ -51,7 +51,20 @@ function showAdminSection(section, evt = null) {
 // Load audit logs
 async function loadAuditLogs() {
     try {
-        const response = await fetch('/api/audit-logs/', {
+        const searchInput = document.getElementById('audit-search');
+        const filterSelect = document.getElementById('audit-filter');
+        const searchValue = searchInput ? searchInput.value.trim() : '';
+        const filterValue = filterSelect ? filterSelect.value : 'all';
+        const params = new URLSearchParams();
+
+        if (searchValue) {
+            params.set('action', searchValue);
+        } else if (filterValue && filterValue !== 'all') {
+            params.set('action', filterValue);
+        }
+
+        const queryString = params.toString();
+        const response = await fetch(`/api/audit-logs/${queryString ? `?${queryString}` : ''}`, {
             headers: authHeaders()
         });
         
@@ -70,7 +83,7 @@ async function loadAuditLogs() {
         tbody.innerHTML = logs.map(log => `
             <tr>
                 <td>${escapeHtml(new Date(log.created_at).toLocaleString())}</td>
-                <td>User #${log.user_id ? parseInt(log.user_id) : 'System'}</td>
+                <td>${escapeHtml(log.username || '') || (log.user_id ? `User #${parseInt(log.user_id)}` : 'System')}</td>
                 <td>${escapeHtml(log.action)}</td>
                 <td>${escapeHtml(log.resource_type) || '-'}</td>
                 <td>${escapeHtml(log.details) || '-'}</td>

@@ -7,6 +7,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from api.core.audit import audit_middleware
 from api.core.config import settings
 from api.core.redis import close_redis_client, get_redis_client
 from api.routes import (
@@ -98,6 +99,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+app.middleware("http")(audit_middleware)
 
 # Include routers
 app.include_router(auth.router)

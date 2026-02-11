@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
@@ -14,7 +15,7 @@ from api.core.security import (
     get_password_hash,
     verify_password,
 )
-from api.models.models import User, UserRole
+from api.models.models import AuditLog, User, UserRole
 from api.schemas.schemas import (
     AdminResetPassword,
     ChangePassword,
@@ -27,6 +28,7 @@ from api.schemas.schemas import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -209,6 +211,22 @@ async def login(
         data={"sub": user.username, "role": user.role.value},
         expires_delta=access_token_expires,
     )
+
+    try:
+        db.add(
+            AuditLog(
+                user_id=None,
+                action="login",
+                resource_type="auth",
+                resource_id=user.id,
+                details=f"User login: {user.username}",
+                ip_address=request.client.host if request.client else None,
+            )
+        )
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.warning("Failed to write audit log: %s", exc)
 
     return {"access_token": access_token, "token_type": "bearer"}
 

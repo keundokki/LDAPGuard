@@ -32,7 +32,7 @@ async def list_audit_logs(
             detail="Only administrators can view audit logs",
         )
 
-    query = select(AuditLog)
+    query = select(AuditLog, User.username).outerjoin(User, User.id == AuditLog.user_id)
 
     # Apply filters
     if action:
@@ -50,8 +50,21 @@ async def list_audit_logs(
     query = query.offset(skip).limit(limit).order_by(desc(AuditLog.created_at))
 
     result = await db.execute(query)
-    logs = result.scalars().all()
-    return logs
+    rows = result.all()
+    return [
+        AuditLogResponse(
+            id=log.id,
+            user_id=log.user_id,
+            username=username,
+            action=log.action,
+            resource_type=log.resource_type,
+            resource_id=log.resource_id,
+            details=log.details,
+            ip_address=log.ip_address,
+            created_at=log.created_at,
+        )
+        for log, username in rows
+    ]
 
 
 @router.get("/{log_id}", response_model=AuditLogResponse)
@@ -69,12 +82,27 @@ async def get_audit_log(
             detail="Only administrators can view audit logs",
         )
 
-    result = await db.execute(select(AuditLog).where(AuditLog.id == log_id))
-    log = result.scalar_one_or_none()
+    result = await db.execute(
+        select(AuditLog, User.username)
+        .outerjoin(User, User.id == AuditLog.user_id)
+        .where(AuditLog.id == log_id)
+    )
+    row = result.one_or_none()
 
-    if not log:
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Audit log not found"
         )
 
-    return log
+    log, username = row
+    return AuditLogResponse(
+        id=log.id,
+        user_id=log.user_id,
+        username=username,
+        action=log.action,
+        resource_type=log.resource_type,
+        resource_id=log.resource_id,
+        details=log.details,
+        ip_address=log.ip_address,
+        created_at=log.created_at,
+    )
