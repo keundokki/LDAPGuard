@@ -76,3 +76,26 @@ backups/
 # Temporary files
 tmp/
 temp/
+
+# Development test files (root only, not tests/ directory)
+/test_*.py
+/test_*.sh
+
+# AI assistant caches
+.claude/
+.cursor/
+.aider/
+
+# Temporary/status documentation
+*_COMPLETE.md
+*_IMPLEMENTATION.md
+TEST_EMAIL_S3_BUTTONS.md
+docs/INSTALLATION_SUMMARY.md
+docs/EMAIL_TESTING.md
+docs/RETRY_QUICK_REFERENCE.md
+
+# LDAP test environment docs (keep only essentials)
+LDAP/SETUP_COMPLETE.md
+LDAP/TEST-USERS.md
+LDAP/TESTING-GUIDE.md
+LDAP/DIRECTORY.md
