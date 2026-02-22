@@ -17,14 +17,25 @@ from api.core.database import Base
 
 
 class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    OPERATOR = "operator"
-    VIEWER = "viewer"
+    ADMIN = "admin"  # Full access to everything
+    BACKUP_ADMIN = "backup_admin"  # Can manage all backup types except full_server
+    SECURITY_ADMIN = "security_admin"  # Can backup/restore schema, config, acl, and certificates
+    OPERATOR = "operator"  # Can create/restore regular directory backups only
+    VIEWER = "viewer"  # Read-only access
 
 
 class BackupType(str, enum.Enum):
     FULL = "full"
     INCREMENTAL = "incremental"
+
+
+class BackupCategory(str, enum.Enum):
+    DIRECTORY = "directory"  # Regular LDAP directory entries
+    SCHEMA = "schema"  # cn=schema backup
+    CONFIG = "config"  # cn=config backup
+    ACL = "acl"  # Access control lists (openLDAPaci, nTSecurityDescriptor, etc.)
+    CERTIFICATES = "certificates"  # SSL/TLS certificates
+    FULL_SERVER = "full_server"  # Complete server state
 
 
 class BackupStatus(str, enum.Enum):
@@ -97,6 +108,11 @@ class Backup(Base):
         default=BackupType.FULL,
         nullable=False,
     )
+    category = Column(
+        Enum(BackupCategory, values_callable=lambda x: [e.value for e in x]),
+        default=BackupCategory.DIRECTORY,
+        nullable=False,
+    )
     status = Column(
         Enum(BackupStatus, values_callable=lambda x: [e.value for e in x]),
         default=BackupStatus.PENDING,
@@ -115,6 +131,24 @@ class Backup(Base):
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Retry logic fields
+    retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=3, nullable=False)
+    next_retry_at = Column(DateTime(timezone=True))
+    
+    # Verification fields
+    checksum = Column(String(64))  # SHA-256 hash
+    checksum_algorithm = Column(String(20), default="sha256")
+    verified_at = Column(DateTime(timezone=True))
+    verification_status = Column(String(20))  # verified, failed, not_verified, pending
+    
+    # Cloud storage fields
+    cloud_uploaded = Column(Boolean, default=False, nullable=False)
+    cloud_storage_path = Column(String(1000))  # S3 key/object path
+    cloud_uploaded_at = Column(DateTime(timezone=True))
+    cloud_provider = Column(String(50))  # aws, minio, backblaze, wasabi, etc.
+    cloud_storage_class = Column(String(50))  # STANDARD, GLACIER, INTELLIGENT_TIERING
 
     # Relationships
     ldap_server = relationship("LDAPServer", back_populates="backups")

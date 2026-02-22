@@ -3,19 +3,15 @@ from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
-from api.core.security import get_current_user
+from api.core.security import get_current_user, pwd_hasher
 from api.models.models import APIKey, User
 from api.schemas.schemas import APIKeyCreate, APIKeyResponse, APIKeyWithSecret
 
 router = APIRouter(prefix="/api-keys", tags=["API Keys"])
-
-# For hashing API keys
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def generate_api_key() -> str:
@@ -59,7 +55,7 @@ async def create_api_key(
 
     # Generate API key
     api_key = generate_api_key()
-    key_hash = pwd_context.hash(api_key)
+    key_hash = pwd_hasher.hash(api_key)
     key_prefix = api_key[:10]  # Store prefix for display
 
     # Calculate expiration

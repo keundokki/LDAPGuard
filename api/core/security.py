@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import hashlib
+import hmac
+import secrets
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,26 +14,63 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.models.models import User
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+class SimplePasswordHasher:
+    """Simple PBKDF2-based password hasher using only standard library."""
+    
+    def __init__(self, iterations: int = 260000):
+        self.iterations = iterations
+    
+    def hash(self, password: str) -> str:
+        """Hash a password using PBKDF2-HMAC-SHA256."""
+        salt = secrets.token_bytes(32)
+        pwd_hash = hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode('utf-8'),
+            salt,
+            self.iterations
+        )
+        # Format: pbkdf2:iterations:salt_hex:hash_hex
+        return f"pbkdf2:{self.iterations}:{salt.hex()}:{pwd_hash.hex()}"
+    
+    def verify(self, password: str, hashed: str) -> bool:
+        """Verify a password against its hash."""
+        try:
+            # Parse the hash format
+            parts = hashed.split(':')
+            if len(parts) != 4 or parts[0] != 'pbkdf2':
+                return False
+            
+            iterations = int(parts[1])
+            salt = bytes.fromhex(parts[2])
+            stored_hash = parts[3]
+            
+            # Compute hash of provided password
+            pwd_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                password.encode('utf-8'),
+                salt,
+                iterations
+            )
+            
+            # Constant-time comparison
+            return hmac.compare_digest(pwd_hash.hex(), stored_hash)
+        except (ValueError, IndexError):
+            return False
+
+
+pwd_hasher = SimplePasswordHasher()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-
-def _normalize_password(password: str) -> str:
-    """Normalize password length for bcrypt (max 72 bytes)."""
-    encoded = password.encode("utf-8")
-    if len(encoded) <= 72:
-        return password
-    return encoded[:72].decode("utf-8", errors="ignore")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash."""
-    return pwd_context.verify(_normalize_password(plain_password), hashed_password)
+    return pwd_hasher.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
-    return pwd_context.hash(_normalize_password(password))
+    return pwd_hasher.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+        .content {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 0 0 8px 8px;
+        }
+        .status {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        .details {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .details-row {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .details-label {
+            font-weight: bold;
+            width: 150px;
+            color: #6c757d;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>✅ LDAPGuard Restore Completed</h1>
+    </div>
+    <div class="content">
+        <div class="status">
+            Success
+        </div>
+        
+        <p>The restore operation completed successfully!</p>
+        
+        <div class="details">
+            <div class="details-row">
+                <div class="details-label">Restore ID:</div>
+                <div>#{{restore_id}}</div>
+            </div>
+            <div class="details-row">
+                <div class="details-label">Backup ID:</div>
+                <div>#{{backup_id}}</div>
+            </div>
+            <div class="details-row">
+                <div class="details-label">Entries Restored:</div>
+                <div>{{entries_restored}}</div>
+            </div>
+            <div class="details-row">
+                <div class="details-label">Duration:</div>
+                <div>{{duration}}</div>
+            </div>
+        </div>
+        
+        <a href="{{restore_url}}" class="button">View Restore Details</a>
+    </div>
+    <div class="footer">
+        <p>This is an automated notification from LDAPGuard.</p>
+        <p>© 2026 LDAPGuard. All rights reserved.</p>
+    </div>
+</body>
+</html>

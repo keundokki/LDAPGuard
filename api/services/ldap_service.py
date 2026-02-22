@@ -130,6 +130,64 @@ class LDAPService:
 
         return len(entries)
 
+    def backup_certificates(self, output_path: str) -> int:
+        """Backup certificate-related configuration entries to LDIF format."""
+        if not self.conn:
+            self.connect()
+
+        # Common TLS-related attributes in OpenLDAP cn=config
+        attributes = [
+            "olcTLSCACertificateFile",
+            "olcTLSCertificateFile",
+            "olcTLSCertificateKeyFile",
+            "olcTLSCACertificatePath",
+            "olcTLSCipherSuite",
+            "olcTLSVerifyClient",
+            "olcTLSCRLFile",
+            "olcTLSProtocolMin",
+        ]
+
+        try:
+            entries = self.conn.search_ext_s(  # type: ignore
+                "cn=config",
+                ldap.SCOPE_SUBTREE,
+                "(objectClass=*)",
+                attributes,
+                0,
+                None,
+                None,
+                -1,
+                0,
+            )
+        except ldap.LDAPError as e:
+            raise Exception(f"LDAP certificate backup failed: {str(e)}")
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            for dn, attrs in entries:
+                if dn is None:
+                    continue
+
+                f.write(f"dn: {dn}\n")
+
+                for attr, values in attrs.items():
+                    for value in values:
+                        if isinstance(value, bytes):
+                            try:
+                                value_str = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                import base64
+
+                                value_str = base64.b64encode(value).decode("utf-8")
+                                f.write(f"{attr}:: {value_str}\n")
+                                continue
+                        else:
+                            value_str = str(value)
+                        f.write(f"{attr}: {value_str}\n")
+
+                f.write("\n")
+
+        return len(entries)
+
     def backup_to_json(
         self, output_path: str, search_filter: str = "(objectClass=*)"
     ) -> int:
@@ -230,6 +288,179 @@ class LDAPService:
         filter_str = f"(&{search_filter}(modifyTimestamp>={time_str}))"
 
         return self.search_all_entries(filter_str)
+
+    def backup_schema(self, output_path: str) -> int:
+        """Backup LDAP schema (cn=schema) to LDIF format."""
+        schema_entries = self.search_all_entries(search_filter="(objectClass=*)")
+
+        # Filter only schema-related entries
+        schema_list = [
+            (dn, attrs)
+            for dn, attrs in schema_entries
+            if dn and ("cn=schema" in dn.lower() or "objectclasses" in attrs)
+        ]
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            for dn, attrs in schema_list:
+                f.write(f"dn: {dn}\n")
+                for attr, values in attrs.items():
+                    for value in values:
+                        if isinstance(value, bytes):
+                            try:
+                                value_str = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                import base64
+
+                                value_str = base64.b64encode(value).decode("utf-8")
+                                f.write(f"{attr}:: {value_str}\n")
+                                continue
+                        else:
+                            value_str = str(value)
+                        f.write(f"{attr}: {value_str}\n")
+                f.write("\n")
+
+        return len(schema_list)
+
+    def backup_config(self, output_path: str) -> int:
+        """Backup LDAP configuration (cn=config) to LDIF format."""
+        config_entries = self.search_all_entries(search_filter="(objectClass=*)")
+
+        # Filter only config-related entries
+        config_list = [
+            (dn, attrs)
+            for dn, attrs in config_entries
+            if dn and "cn=config" in dn.lower()
+        ]
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            for dn, attrs in config_list:
+                f.write(f"dn: {dn}\n")
+                for attr, values in attrs.items():
+                    for value in values:
+                        if isinstance(value, bytes):
+                            try:
+                                value_str = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                import base64
+
+                                value_str = base64.b64encode(value).decode("utf-8")
+                                f.write(f"{attr}:: {value_str}\n")
+                                continue
+                        else:
+                            value_str = str(value)
+                        f.write(f"{attr}: {value_str}\n")
+                f.write("\n")
+
+        return len(config_list)
+
+    def backup_rootdse(self, output_path: str) -> int:
+        """Backup Root DSE (server capabilities) to LDIF format."""
+        # Connect and get rootDSE by searching with empty DN
+        if not self.conn:
+            self.connect()
+
+        try:
+            # Get Root DSE
+            result = self.conn.search_s("", ldap.SCOPE_BASE, "(objectClass=*)")
+
+            with open(output_path, "w", encoding="utf-8") as f:
+                for dn, attrs in result:
+                    if dn is None:
+                        continue
+                    f.write(f"dn: {dn}\n")
+                    for attr, values in attrs.items():
+                        for value in values:
+                            if isinstance(value, bytes):
+                                try:
+                                    value_str = value.decode("utf-8")
+                                except UnicodeDecodeError:
+                                    import base64
+
+                                    value_str = base64.b64encode(value).decode("utf-8")
+                                    f.write(f"{attr}:: {value_str}\n")
+                                    continue
+                            else:
+                                value_str = str(value)
+                            f.write(f"{attr}: {value_str}\n")
+                    f.write("\n")
+
+            return len(result)
+        except ldap.LDAPError as e:
+            raise Exception(f"Failed to backup Root DSE: {str(e)}")
+
+    def backup_acls(self, output_path: str) -> int:
+        """Backup access control lists (ACLs).
+        
+        Includes:
+        - OpenLDAP: openLDAPaci attributes from all entries + olcAccess from cn=config
+        - Active Directory: nTSecurityDescriptor attribute
+        - 389-DS: ACL attributes on entries
+        """
+        if not self.conn:
+            self.connect()
+
+        acl_entries: List[Tuple[str, Dict]] = []
+        acl_attributes = [
+            "openLDAPaci",  # OpenLDAP entry-level ACLs
+            "nTSecurityDescriptor",  # Active Directory
+            "aci",  # Generic ACL attribute
+        ]
+
+        # Search for entries with ACL attributes
+        acl_filter = "(|(openLDAPaci=*)(nTSecurityDescriptor=*)(aci=*))"
+        try:
+            acl_entries = self.search_entries(acl_filter, acl_attributes)
+        except Exception:
+            # If search fails, try to get all entries and filter
+            all_entries = self.search_all_entries()
+            acl_entries = [
+                (dn, {k: v for k, v in attrs.items() if k.lower() in [a.lower() for a in acl_attributes]})
+                for dn, attrs in all_entries
+                if any(k.lower() in [a.lower() for a in acl_attributes] for k in attrs.keys())
+            ]
+
+        # Also try to backup OpenLDAP's cn=config ACLs (olcAccess rules)
+        try:
+            # Search for olcAccess entries in cn=config
+            result = self.conn.search_s(
+                "cn=config",
+                ldap.SCOPE_SUBTREE,
+                "(olcAccess=*)",
+                None
+            )
+            acl_entries.extend(result)
+        except Exception:
+            pass  # cn=config may not be accessible or supported
+
+        # Write ACLs to LDIF
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("# LDAP Access Control Lists (ACLs)\n")
+            f.write(f"# Backup created: {datetime.now().isoformat()}\n\n")
+
+            for dn, attrs in acl_entries:
+                if dn is None:
+                    continue
+
+                f.write(f"dn: {dn}\n")
+
+                for attr, values in attrs.items():
+                    for value in values:
+                        if isinstance(value, bytes):
+                            try:
+                                value_str = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                import base64
+
+                                value_str = base64.b64encode(value).decode("utf-8")
+                                f.write(f"{attr}:: {value_str}\n")
+                                continue
+                        else:
+                            value_str = str(value)
+                        f.write(f"{attr}: {value_str}\n")
+
+                f.write("\n")
+
+        return len(acl_entries)
 
     def test_connection(self) -> bool:
         """Test LDAP connection."""

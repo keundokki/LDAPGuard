@@ -61,9 +61,30 @@
                     </div>
                 </div>
 
-                <h3>Recent Activity</h3>
-                <div class="activity-list" id="recent-activity">
-                    <p class="no-data">No recent activity</p>
+                <h3>Backup Health</h3>
+                <div class="table-container">
+                    <table class="data-table" id="backup-health-table">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>Last Backup</th>
+                                <th>Status</th>
+                                <th>Last Success</th>
+                                <th>Success Age</th>
+                                <th>Last Failure</th>
+                                <th>Failure Age</th>
+                                <th>Failure Streak</th>
+                                <th>Next Scheduled</th>
+                                <th>24h Count</th>
+                                <th>Missed Schedule</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backup-health-body">
+                            <tr>
+                                <td colspan="11" class="no-data">No backup activity</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -108,9 +129,112 @@
                     <h2>Backups</h2>
                     <div>
                         <button id="batchDeleteBtn" class="btn btn-danger" onclick="batchDeleteBackups()" style="display:none;">🗑️ Delete Selected</button>
-                        <button id="createBackupBtn" class="btn btn-primary" onclick="showCreateBackupModal()">+ Create Backup</button>
+                        <button class="btn btn-secondary" onclick="toggleBackupFilters()">🔍 Filters</button>
+                        <button id="createBackupBtn" class="btn btn-primary" onclick="showCreateBackupModal('directory')">+ Create Backup</button>
                     </div>
                 </div>
+                
+                <!-- Advanced Filters Panel -->
+                <div id="backup-filters" class="filter-panel" style="display: none;">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Server:</label>
+                            <select id="filter-server">
+                                <option value="">All Servers</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Status:</label>
+                            <select id="filter-status">
+                                <option value="">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="failed">Failed</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Type:</label>
+                            <select id="filter-type">
+                                <option value="">All Types</option>
+                                <option value="full">Full</option>
+                                <option value="incremental">Incremental</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Category:</label>
+                            <select id="filter-category">
+                                <option value="">All Categories</option>
+                                <option value="directory">Directory</option>
+                                <option value="schema">Schema</option>
+                                <option value="config">Config</option>
+                                <option value="acl">ACL</option>
+                                <option value="certificates">Certificates</option>
+                                <option value="full_server">Full Server</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Verification:</label>
+                            <select id="filter-verification">
+                                <option value="">All</option>
+                                <option value="verified">Verified</option>
+                                <option value="failed">Failed</option>
+                                <option value="not_verified">Not Verified</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Cloud Status:</label>
+                            <select id="filter-cloud">
+                                <option value="">All</option>
+                                <option value="true">Uploaded</option>
+                                <option value="false">Not Uploaded</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Created After:</label>
+                            <input type="datetime-local" id="filter-created-after">
+                        </div>
+                        <div class="filter-group">
+                            <label>Created Before:</label>
+                            <input type="datetime-local" id="filter-created-before">
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Min Size (MB):</label>
+                            <input type="number" id="filter-min-size" min="0" step="0.1">
+                        </div>
+                        <div class="filter-group">
+                            <label>Max Size (MB):</label>
+                            <input type="number" id="filter-max-size" min="0" step="0.1">
+                        </div>
+                        <div class="filter-group">
+                            <label>Sort By:</label>
+                            <select id="filter-sort-by">
+                                <option value="created_at">Created Date</option>
+                                <option value="completed_at">Completed Date</option>
+                                <option value="file_size">Size</option>
+                                <option value="entry_count">Entry Count</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Order:</label>
+                            <select id="filter-sort-order">
+                                <option value="desc">Newest First</option>
+                                <option value="asc">Oldest First</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn btn-primary" onclick="applyBackupFilters()">Apply Filters</button>
+                        <button class="btn btn-secondary" onclick="resetBackupFilters()">Reset</button>
+                        <span id="filter-results-count" style="margin-left: 20px; color: #666;"></span>
+                    </div>
+                </div>
+                
                 <div class="table-controls">
                     <input type="text" id="backups-search" placeholder="Search backups...">
                     <div class="pagination">
@@ -125,7 +249,6 @@
                         <thead>
                             <tr>
                                 <th><input type="checkbox" id="select-all-backups" onchange="toggleAllBackups(this)"></th>
-                                <th>ID</th>
                                 <th>Server</th>
                                 <th>Type</th>
                                 <th>Status</th>
@@ -137,7 +260,7 @@
                         </thead>
                         <tbody id="backups-tbody">
                             <tr>
-                                <td colspan="9" class="no-data">No backups found</td>
+                                <td colspan="8" class="no-data">No backups found</td>
                             </tr>
                         </tbody>
                     </table>
@@ -161,8 +284,6 @@
                     <table id="restores-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Backup ID</th>
                                 <th>Server</th>
                                 <th>Status</th>
                                 <th>Entries Restored</th>
@@ -172,7 +293,7 @@
                         </thead>
                         <tbody id="restores-tbody">
                             <tr>
-                                <td colspan="7" class="no-data">No restore jobs found</td>
+                                <td colspan="5" class="no-data">No restore jobs found</td>
                             </tr>
                         </tbody>
                     </table>
@@ -232,7 +353,6 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Username</th>
                                 <th>Email</th>
                                 <th>Role</th>
@@ -242,7 +362,7 @@
                             </tr>
                         </thead>
                         <tbody id="users-tbody">
-                            <tr><td colspan="7" class="no-data">Loading...</td></tr>
+                            <tr><td colspan="6" class="no-data">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -307,9 +427,10 @@
                 <div id="admin-notifications" class="admin-section">
                     <div class="section-header">
                         <h3>Notification Settings</h3>
-                        <button class="btn btn-primary" onclick="event.preventDefault(); saveNotificationSettings();">💾 Save Settings</button>
                     </div>
+                    <form id="notificationSettingsForm" onsubmit="saveNotificationSettings(event)">
                     <div class="settings-form">
+                        <h4>Event Notifications</h4>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="notification_on_backup_success"> 
@@ -328,6 +449,44 @@
                                 Notify on restore completion
                             </label>
                         </div>
+
+                        <h4>Email Server Configuration (SMTP)</h4>
+                        <div class="form-group">
+                            <label for="smtp_server">SMTP Server Host</label>
+                            <input type="text" id="smtp_server" placeholder="smtp.gmail.com or smtp.company.com">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+                            <div class="form-group">
+                                <label for="smtp_port">SMTP Port</label>
+                                <input type="number" id="smtp_port" placeholder="587" value="587" min="1" max="65535">
+                            </div>
+                            <div class="form-group">
+                                <label for="smtp_encryption">Encryption</label>
+                                <select id="smtp_encryption">
+                                    <option value="none">None</option>
+                                    <option value="tls" selected>TLS</option>
+                                    <option value="ssl">SSL</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="smtp_username">SMTP Username</label>
+                            <input type="text" id="smtp_username" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="smtp_password">SMTP Password</label>
+                            <input type="password" id="smtp_password" placeholder="••••••••">
+                            <small class="help-text">Password is encrypted before saving</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="smtp_from_email">From Email Address</label>
+                            <input type="email" id="smtp_from_email" placeholder="ldapguard@company.com" required>
+                        </div>
+                        <div class="form-group">
+                            <button type="button" class="btn btn-secondary" onclick="testEmailConfiguration()">📧 Test Configuration</button>
+                        </div>
+
+                        <h4>Notification Recipients</h4>
                         <div class="form-group">
                             <label for="notification_email">Email Recipients</label>
                             <input type="text" id="notification_email" placeholder="admin@example.com, ops@example.com">
@@ -338,7 +497,14 @@
                             <input type="url" id="notification_webhook_url" placeholder="https://hooks.slack.com/services/...">
                             <small class="help-text">Slack, Discord, Teams webhook URL</small>
                         </div>
+                        <div class="form-group">
+                            <button type="button" class="btn btn-secondary" onclick="testWebhookConfiguration()">🔗 Test Webhook</button>
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">💾 Save Notification Settings</button>
+                        </div>
                     </div>
+                    </form>
                 </div>
 
                 <!-- Settings Section -->
@@ -353,32 +519,94 @@
                     </div>
                     <div class="settings-form">
                         <h4>Backup Settings</h4>
-                        <div class="form-group">
-                            <label for="default-retention">Default Retention (days)</label>
-                            <input type="number" id="default-retention" value="30" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="backup-path">Backup Storage Path</label>
-                            <input type="text" id="backup-path" value="/data/backups" readonly>
-                        </div>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="auto-verify" checked> 
-                                Auto-verify backups after creation
-                            </label>
-                        </div>
-                        <h4>Security Settings</h4>
-                        <div class="form-group">
-                            <label for="session-timeout">Session Timeout (minutes)</label>
-                            <input type="number" id="session-timeout" value="60" min="5">
-                        </div>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="require-2fa"> 
-                                Enable 2FA (optional for users)
-                            </label>
-                        </div>
-                        <button type="button" class="btn btn-primary" onclick="saveSystemSettings()">💾 Save Settings</button>
+                        <form id="systemSettingsForm" onsubmit="saveSystemSettings(event)">
+                            <div class="form-group">
+                                <label for="retentionDays">Default Retention (days)</label>
+                                <input type="number" id="retentionDays" value="30" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="backupPath">Backup Storage Path</label>
+                                <input type="text" id="backupPath" value="/app/backups" readonly>
+                            </div>
+
+                            <h4>Security Settings</h4>
+                            <div class="form-group">
+                                <label for="sessionTimeout">Session Timeout (minutes)</label>
+                                <input type="number" id="sessionTimeout" value="60" min="5">
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="require2FA">
+                                    Enable 2FA (optional for users)
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">💾 Save System Settings</button>
+                        </form>
+
+                        <h4 style="margin-top: 30px;">☁️ S3 / Cloud Storage Configuration</h4>
+                        <form id="s3ConfigForm" onsubmit="saveS3Configuration(event)">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="s3_enabled"> 
+                                    Enable S3 Backup Upload
+                                </label>
+                                <small class="help-text">Automatically upload backups to S3</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_provider">Cloud Provider</label>
+                                <select id="s3_provider" onchange="updateS3ProviderSettings()">
+                                    <option value="aws">Amazon S3</option>
+                                    <option value="digitalocean">DigitalOcean Spaces</option>
+                                    <option value="minio">MinIO</option>
+                                    <option value="custom">Custom S3-Compatible</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_region">Region</label>
+                                <input type="text" id="s3_region" placeholder="us-east-1" value="us-east-1">
+                                <small class="help-text">AWS region or endpoint region</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_bucket">Bucket Name</label>
+                                <input type="text" id="s3_bucket" placeholder="ldapguard-backups" required>
+                                <small class="help-text">S3 bucket name (will be created if it doesn't exist)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_access_key">Access Key ID</label>
+                                <input type="text" id="s3_access_key" placeholder="AKIA..." required>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_secret_key">Secret Access Key</label>
+                                <input type="password" id="s3_secret_key" placeholder="••••••••••••••••" required>
+                                <small class="help-text">Encrypted before saving</small>
+                            </div>
+                            <div id="s3_endpoint_group" class="form-group" style="display: none;">
+                                <label for="s3_endpoint">Custom Endpoint URL</label>
+                                <input type="url" id="s3_endpoint" placeholder="https://minio.company.com">
+                                <small class="help-text">For MinIO or custom S3-compatible services</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="s3_storage_class">Storage Class</label>
+                                <select id="s3_storage_class">
+                                    <option value="STANDARD">Standard</option>
+                                    <option value="INTELLIGENT_TIERING">Intelligent-Tiering</option>
+                                    <option value="GLACIER">Glacier</option>
+                                    <option value="DEEP_ARCHIVE">Deep Archive</option>
+                                </select>
+                                <small class="help-text">Cost optimization for long-term storage</small>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="s3_enable_versioning"> 
+                                    Enable Bucket Versioning
+                                </label>
+                                <small class="help-text">Keep backup versions for recovery</small>
+                            </div>
+                            <div class="form-group">
+                                <button type="button" class="btn btn-secondary" onclick="testS3Configuration()">🧪 Test Connection</button>
+                                <button type="submit" class="btn btn-primary">💾 Save S3 Configuration</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -488,11 +716,123 @@
     <div id="backupContentModal" class="modal">
         <div class="modal-content modal-large">
             <span class="close" onclick="closeBackupContentModal()">&times;</span>
-            <h2>Backup Content</h2>
+            <h2>Backup Content Viewer</h2>
             <p id="backupContentMeta" class="help-text">Loading...</p>
-            <pre id="backupContentBody" class="backup-content"></pre>
+            
+            <!-- Global Controls -->
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; padding: 12px; background: var(--hover-color); border-radius: 6px;">
+                <select 
+                    id="backupLineLimit" 
+                    onchange="reloadBackupContent()"
+                    style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary);"
+                    title="Select how many lines to load"
+                >
+                    <option value="100">100 lines</option>
+                    <option value="200" selected>200 lines</option>
+                    <option value="500">500 lines</option>
+                    <option value="1000">1000 lines</option>
+                    <option value="0">All lines</option>
+                </select>
+                <span style="font-size: 0.85em; color: var(--text-secondary);">Load limit (applies to all views)</span>
+            </div>
+            
+            <!-- View Tabs -->
+            <div class="backup-view-tabs">
+                <button class="backup-view-tab active" data-view="Raw" onclick="switchBackupView('Raw')">
+                    📝 Raw LDIF
+                </button>
+                <button class="backup-view-tab" data-view="Parsed" onclick="switchBackupView('Parsed')">
+                    📋 Entries
+                </button>
+                <button class="backup-view-tab" data-view="Tree" onclick="switchBackupView('Tree')">
+                    🌳 Tree View
+                </button>
+            </div>
+            
+            <!-- Raw View -->
+            <div id="backupRawView" class="backup-view-content">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+                    <input 
+                        type="text" 
+                        id="backupSearchInput" 
+                        placeholder="Search lines (e.g., uid=john, objectClass=person)" 
+                        style="flex: 1; min-width: 250px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;"
+                        onkeyup="searchBackupContent()"
+                    >
+                    <button class="btn btn-secondary" onclick="clearBackupSearch()" title="Clear search">Clear</button>
+                    <span id="backupSearchResults" style="font-size: 0.9em; color: var(--text-secondary); white-space: nowrap;"></span>
+                </div>
+                
+                <pre id="backupContentBody" class="backup-content"></pre>
+            </div>
+            
+            <!-- Parsed View -->
+            <div id="backupParsedView" class="backup-view-content" style="display: none;">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+                    <input 
+                        type="text" 
+                        id="parsedSearchInput" 
+                        placeholder="Search entries by DN or attributes..." 
+                        style="flex: 1; min-width: 250px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;"
+                        onkeyup="searchParsedEntries()"
+                    >
+                    <button class="btn btn-secondary" onclick="clearParsedSearch()">Clear</button>
+                    <span id="parsedEntryCount" style="font-size: 0.9em; color: var(--text-secondary); white-space: nowrap;">0 entries</span>
+                </div>
+                
+                <div id="backupParsedContent" class="parsed-entries-container"></div>
+                <div style="height: 100px;"></div>
+            </div>
+            
+            <!-- Tree View -->
+            <div id="backupTreeView" class="backup-view-content" style="display: none;">
+                <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                    <input 
+                        type="text" 
+                        id="treeSearchInput" 
+                        placeholder="Search tree..." 
+                        style="flex: 1; min-width: 250px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;"
+                        onkeyup="searchTreeView()"
+                    >
+                    <button class="btn btn-secondary" onclick="expandAllTreeNodes()">Expand All</button>
+                    <button class="btn btn-secondary" onclick="collapseAllTreeNodes()">Collapse All</button>
+                </div>
+                <div id="backupTreeContent" class="tree-view-container"></div>
+                <div style="height: 100px;"></div>
+            </div>
+            
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeBackupContentModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Diff Modal -->
+    <div id="backupDiffModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeBackupDiffModal()">&times;</span>
+            <h2>Backup Diff</h2>
+            <p id="backupDiffMeta" class="help-text">Select a backup to compare.</p>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+                <label for="backupDiffTarget" style="white-space: nowrap;">Compare with</label>
+                <select id="backupDiffTarget" style="flex: 1; min-width: 220px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary);"></select>
+                <button class="btn btn-secondary" onclick="runBackupDiff()">Compare</button>
+            </div>
+
+            <div class="diff-table-wrapper">
+                <table class="diff-table">
+                    <thead>
+                        <tr>
+                            <th colspan="2">Base</th>
+                            <th colspan="2">Compare</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupDiffBody"></tbody>
+                </table>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBackupDiffModal()">Close</button>
             </div>
         </div>
     </div>
@@ -564,42 +904,101 @@
 
     <!-- Create Restore Modal -->
     <div id="createRestoreModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeCreateRestoreModal()">&times;</span>
-            <h2>Create Restore</h2>
-            <form id="createRestoreForm" onsubmit="handleCreateRestore(event)">
-                <div class="form-group">
-                    <label for="restoreBackupId">Backup *</label>
-                    <select id="restoreBackupId" required>
-                        <option value="">Loading backups...</option>
-                    </select>
-                </div>
-
+        <div class="modal-content" style="max-width: 1000px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">Create Restore</h2>
+                <span class="close" onclick="closeCreateRestoreModal()" style="cursor: pointer;">&times;</span>
+            </div>
+            <form id="createRestoreForm" onsubmit="handleCreateRestore(event)" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding: 0 20px;">
+                <!-- Step 1: Select LDAP Server -->
                 <div class="form-group">
                     <label for="restoreServerId">Target LDAP Server *</label>
-                    <select id="restoreServerId" required>
+                    <select id="restoreServerId" required onchange="updateRestoreBackupDates()">
                         <option value="">Loading servers...</option>
                     </select>
                 </div>
 
+                <!-- Step 2: Select Backup by Calendar -->
+                <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px; background: var(--surface);">
+                    <h3 style="margin-top: 0;">Select Backup</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-height: 400px;">
+                        <!-- Calendar Section -->
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="display: block; margin-bottom: 10px; font-weight: 600;">Backup Date</label>
+                            <div id="restoreCalendar" class="restore-calendar" style="flex: 1; overflow-y: auto;"></div>
+                        </div>
+                        
+                        <!-- Time Selection -->
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="display: block; margin-bottom: 10px; font-weight: 600;">Available Backups</label>
+                            <div id="restoreTimesList" class="restore-times-list" style="border: 1px solid var(--border-color); border-radius: 4px; background: var(--background); flex: 1; overflow-y: auto; min-height: 100px;">
+                                <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                                    Select a date to see available backups
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" id="restoreBackupId" required>
+                    <div id="restoreBackupInfo" style="margin-top: 12px; padding: 12px; background: var(--hover-color); border-radius: 4px; display: none;">
+                        Selected: <strong id="restoreBackupInfoText"></strong>
+                    </div>
+                </div>
+
+                <!-- Step 3: Selective Restore -->
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="restoreSelective" onchange="toggleRestoreFilter()">
-                        Selective restore
+                        Selective restore (select specific entries)
                     </label>
                 </div>
 
                 <div class="form-group" id="restoreFilterGroup" style="display: none;">
-                    <label for="restoreFilter">LDAP Filter</label>
-                    <input type="text" id="restoreFilter" placeholder="(objectClass=person)">
+                    <div style="border: 1px solid var(--border-color); border-radius: 4px; padding: 12px;">
+                        <div style="margin-bottom: 12px;">
+                            <input 
+                                type="text" 
+                                id="restoreSearchInput" 
+                                placeholder="Search entries (DN, uid, cn, mail...)" 
+                                style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box;"
+                                onkeyup="filterRestoreEntries()"
+                            >
+                        </div>
+                        
+                        <div style="margin-bottom: 12px; padding: 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 0.9em;">
+                            <label>
+                                <input type="checkbox" id="selectAllRestoreEntries" onchange="toggleAllRestoreEntries()">
+                                <strong>Select All</strong>
+                            </label>
+                            <span id="restoreSelectionCount" style="float: right; color: var(--text-secondary);">0 selected</span>
+                        </div>
+
+                        <!-- Entries Preview -->
+                        <div style="margin-bottom: 16px; display: flex; flex-direction: column; min-height: 200px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.95em;">Entries in Selected Backup</label>
+                            <div id="restoreEntriesPreview" style="flex: 1; min-height: 200px; max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); padding: 12px;">
+                                <div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.9em;">
+                                    Select a backup to see entries
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 12px; padding: 8px; background: var(--bg-accent); border-radius: 4px;">
+                            <label for="restoreFilter">Generated LDAP Filter:</label>
+                            <textarea 
+                                id="restoreFilter" 
+                                style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; font-family: monospace; font-size: 0.85em; margin-top: 4px;" 
+                                rows="3" 
+                                placeholder="Filter will be auto-generated from selections or enter custom LDAP filter"
+                                readonly
+                            ></textarea>
+                            <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 4px;" onclick="clearRestoreSelections()">Clear Selection</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="restorePointInTime">Point-in-time (optional)</label>
-                    <input type="datetime-local" id="restorePointInTime">
-                </div>
-
-                <div class="form-actions">
+                <div class="form-actions" style="flex-shrink: 0; margin-top: auto; margin-left: -20px; margin-right: -20px; border-top: 1px solid var(--border-color); padding: 20px;">
                     <button type="button" class="btn btn-secondary" onclick="closeCreateRestoreModal()">Cancel</button>
                     <button type="submit" id="createRestoreSubmit" class="btn btn-primary">Create Restore</button>
                 </div>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup Completed Successfully</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 0;
+        }
+        .email-wrapper {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .success-box {
+            background: #f0fdf4;
+            border-left: 4px solid #16a34a;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .success-box h2 {
+            margin: 0 0 10px 0;
+            color: #16a34a;
+            font-size: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+        .stat-card {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .info-grid {
+            display: table;
+            width: 100%;
+            margin: 25px 0;
+        }
+        .info-row {
+            display: table-row;
+        }
+        .info-label {
+            display: table-cell;
+            padding: 8px 0;
+            font-weight: 600;
+            color: #64748b;
+            width: 40%;
+        }
+        .info-value {
+            display: table-cell;
+            padding: 8px 0;
+            color: #1e293b;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 28px;
+            background: #16a34a;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 20px 0;
+            transition: background 0.3s;
+        }
+        .button:hover {
+            background: #15803d;
+        }
+        .footer {
+            background: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+        .footer p {
+            margin: 5px 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .footer a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="header">
+            <div class="icon">✅</div>
+            <h1>Backup Completed</h1>
+        </div>
+        
+        <div class="content">
+            <div class="success-box">
+                <h2>LDAP Backup Successful</h2>
+                <p>Your LDAP directory has been backed up successfully. All data is secure and encrypted.</p>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-row">
+                    <div class="info-label">Server:</div>
+                    <div class="info-value"><strong>{{server_name}}</strong></div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Backup ID:</div>
+                    <div class="info-value">#{{backup_id}}</div>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Entries</div>
+                    <div class="stat-value">{{entry_count}}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">File Size</div>
+                    <div class="stat-value">{{file_size}}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Duration</div>
+                    <div class="stat-value">{{duration}}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Status</div>
+                    <div class="stat-value" style="color: #16a34a;">✓ OK</div>
+                </div>
+            </div>
+
+            <center>
+                <a href="{{backup_url}}" class="button">View Backup Details</a>
+            </center>
+        </div>
+
+        <div class="footer">
+            <p><strong>LDAPGuard</strong> - LDAP Backup & Recovery</p>
+            <p>This is an automated notification. Please do not reply to this email.</p>
+            <p>Need help? Visit our <a href="https://github.com/keundokki/LDAPGuard">documentation</a></p>
+        </div>
+    </div>
+</body>
+</html>

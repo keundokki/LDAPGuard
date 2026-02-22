@@ -6,6 +6,108 @@
 
 **Multi-container Podman application for centralized LDAP backup/restore on Linux NAS**
 
+## 🚀 **[New to LDAPGuard? Start Here →](GETTING_STARTED.md)**
+
+---
+
+## 🎯 Try It in 30 Seconds
+
+Want to see LDAPGuard in action before installing?
+
+```bash
+# Quick demo with Docker (testing only, no persistence)
+docker run -d -p 3000:3000 -p 8000:8000 ghcr.io/keundokki/ldapguard:latest
+```
+
+Then open http://localhost:3000 (login: `demo`/`demo`)
+
+> ⚠️ **Note**: This demo mode stores data in memory only. Use the installation methods below for real deployments.
+
+---
+
+## ⚡ Installation Simplified
+
+We've simplified installation from a **complex, error-prone process** to a **single command**:
+
+### Before vs. After
+
+```
+❌ BEFORE (10-20 minutes, 12 manual steps)
+┌─────────────────────────────────────────────┐
+│ 1. Clone repository                         │
+│ 2. Copy .env.example → .env                │
+│ 3. Manually edit 8+ configuration fields   │
+│ 4. Generate SECRET_KEY with openssl        │
+│ 5. Generate ENCRYPTION_KEY                 │
+│ 6. Generate database password              │
+│ 7. Update .env with generated keys         │
+│ 8. Create backup directories               │
+│ 9. Run docker-compose up -d                │
+│ 10. Hope everything works                  │
+│ 11. Search docs for default credentials    │
+│ 12. Figure out where to access UI          │
+└─────────────────────────────────────────────┘
+
+✅ NOW (2-3 minutes, 1 command)
+┌─────────────────────────────────────────────┐
+│ curl -fsSL ...install.sh | bash            │
+│    ↓                                        │
+│ Everything automated!                      │
+│ • System checks ✓                          │
+│ • Secure key generation ✓                 │
+│ • Configuration ✓                          │
+│ • Deployment ✓                             │
+│ • Health validation ✓                      │
+│ • Clear next steps ✓                       │
+└─────────────────────────────────────────────┘
+```
+
+### Installation Methods Comparison
+
+| Method | Time | Difficulty | Best For |
+|--------|------|-----------|----------|
+| **One-line installer** | 2-3 min | ⭐ Easy | Everyone (recommended) |
+| **Make install** | 3-4 min | ⭐⭐ Medium | Developers |
+| **Manual Docker** | 5-10 min | ⭐⭐⭐ Advanced | Power users |
+| **Kubernetes Helm** | 10-15 min | ⭐⭐⭐ Advanced | Production clusters |
+
+**Installation Decision Tree:**
+
+```
+Want to install LDAPGuard?
+        │
+        ▼
+   Have Docker? ───NO──▶ Install Docker first
+        │                (see INSTALL.md)
+       YES                      │
+        │                       │
+        ▼                       ▼
+  curl ...install.sh | bash ◀───┘
+        │
+        ▼
+  Quick or Custom mode?
+        │
+        ▼
+  Auto-configure & start
+        │
+        ▼
+  Open http://localhost:3000
+        │
+        ▼
+  Login: admin/admin
+        │
+        ▼
+   ✅ SUCCESS! ✅
+```
+
+**Key Improvements:**
+- ⏱️ **83% faster** - 10-20 min → 2-3 min
+- 🎯 **92% fewer steps** - 12 steps → 1 command
+- ✅ **Near-zero errors** - Automatic validation
+- 📚 **Better docs** - 4 focused guides
+
+---
+
 ## 🚀 Features
 
 - **Multi-Service Architecture**: Web UI, API, Workers, PostgreSQL, Redis, Logging
@@ -15,11 +117,13 @@
   - Selective restore with LDAP filters
   - AES-256 encryption
   - Compression support
+  - **🔄 Automatic retry with exponential backoff** - [Retry Logic Guide](docs/BACKUP_RETRY_LOGIC.md)
 - **Security**:
   - LDAP authentication integration
   - Role-Based Access Control (RBAC)
   - Encrypted backup storage
 - **Monitoring & Integration**:
+  - **📧 Email notifications** (Gmail, SendGrid, Office 365, AWS SES, etc.) - [Setup Guide](docs/EMAIL_NOTIFICATIONS.md)
   - Webhook notifications
   - Prometheus metrics
   - Comprehensive audit logging
@@ -48,44 +152,82 @@
 - Podman Compose or Docker Compose
 - Linux NAS or server
 
+> 🆕 **New to installation?** See our detailed [Installation Guide](INSTALL.md)
+
 ### Kubernetes Deployment
 - Kubernetes 1.25+ cluster
 - kubectl configured
 - ArgoCD (recommended) or Helm 3.0+
 
+---
+
 ## 🚀 Quick Start
 
-### Option 1: Docker/Podman (Local Development)
+### ⚡ One-Line Install (Recommended)
 
-1. **Clone the repository**:
+The fastest way to get started:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/keundokki/LDAPGuard/main/install.sh | bash
+```
+
+This interactive installer will:
+- ✅ Check system prerequisites
+- ✅ Generate secure encryption keys
+- ✅ Configure all services
+- ✅ Start LDAPGuard automatically
+- ✅ Show you exactly where to go next
+
+**Access after install:**
+- Web UI: http://localhost:3000
+- Default login: `admin` / `admin` (change immediately!)
+
+---
+
+### 🛠️ Manual Installation
+
+For more control over the installation:
+
+#### Option 1: Using Makefile (Simplest)
+
+```bash
+git clone https://github.com/keundokki/LDAPGuard.git
+cd LDAPGuard
+make install
+```
+
+Common commands:
+```bash
+make start      # Start services
+make stop       # Stop services
+make logs       # View logs
+make health     # Check health
+make help       # See all commands
+```
+
+#### Option 2: Docker/Podman (Traditional)
+
+#### Option 2: Docker/Podman (Traditional)
+
+1. **Clone and configure**:
    ```bash
    git clone https://github.com/keundokki/LDAPGuard.git
    cd LDAPGuard
-   ```
-
-2. **Configure environment**:
-   ```bash
    cp .env.example .env
-   # Edit .env with your configuration
-   nano .env
+   nano .env  # Edit configuration
    ```
-  > **Note**: Never commit `.env` files. They are gitignored by default.
 
-3. **Start services**:
+2. **Start services**:
    ```bash
-   # Using Docker Compose
    docker-compose up -d
-   
-   # Or using Podman Compose
-   podman-compose up -d
+   # Or: podman-compose up -d
    ```
 
-4. **Access the web interface**:
-   - Open http://localhost:3000 in your browser
-   - API documentation: http://localhost:8000/docs
-   - Metrics: http://localhost:8000/metrics
+3. **Access**: http://localhost:3000
 
-### Option 2: Kubernetes (Production)
+---
+
+### Option 3: Kubernetes (Production)
 
 LDAPGuard supports two Kubernetes deployment methods:
 
@@ -146,6 +288,182 @@ kubectl apply -k k8s/ --kustomization k8s/examples/patches/
 | **ArgoCD GUI** | ✅ Parameter input | ❌ Requires patch files |
 | **Flexibility** | ⭐⭐ 100+ parameters | ⭐⭐⭐ Any YAML field |
 | **Best For** | Most deployments | Complex customizations |
+
+---
+
+## 🔄 Updating an Existing Installation
+
+### Docker/Podman Updates
+
+#### Automated Update (Recommended)
+
+Update to the latest or specific version:
+
+```bash
+# Update to latest version
+./update.sh
+
+# Update to specific version
+./update.sh --version 1.0.1
+
+# Update without database backup (faster, less safe)
+./update.sh --version 1.0.1 --skip-backup
+```
+
+**What the update script does:**
+1. ✅ Creates automatic database backup (unless --skip-backup)
+2. ✅ Pulls Docker images for specified version
+3. ✅ Updates IMAGE_TAG in .env file
+4. ✅ Stops services gracefully  
+5. ✅ Runs database migrations
+6. ✅ Restarts services with new version
+7. ✅ Validates health before completing
+
+**Using Makefile:**
+```bash
+make update         # Run update script (latest)
+make version        # Check current version
+make check-updates  # See if updates available
+```
+
+#### Version Selection
+
+LDAPGuard images are tagged with each release:
+
+```bash
+# Available tags:
+ghcr.io/keundokki/ldapguard-api:latest    # Latest stable release
+ghcr.io/keundokki/ldapguard-api:1.0.1     # Specific version
+ghcr.io/keundokki/ldapguard-api:sha-abc   # Specific commit
+```
+
+To manually select a version, edit `.env`:
+
+```bash
+IMAGE_TAG=1.0.1  # Pin to specific version
+# or
+IMAGE_TAG=latest  # Always use latest
+```
+
+Then:
+
+```bash
+docker-compose pull
+docker-compose up -d
+```
+
+#### Manual Update
+
+If you prefer manual control:
+
+```bash
+# 1. Backup database
+make db-backup
+
+# 2. Pull specific version
+export IMAGE_TAG=1.0.1
+docker-compose pull
+
+# 3. Restart services
+docker-compose down
+docker-compose up -d
+
+# 4. Run migrations
+docker-compose exec api alembic upgrade head
+```
+
+---
+
+### Kubernetes Updates
+
+#### Automated K8s Update
+
+Use the dedicated Kubernetes update script:
+
+```bash
+# Update to specific version (auto-detects method)
+./update-k8s.sh --version 1.0.1
+
+# Specify namespace
+./update-k8s.sh --version 1.0.1 --namespace production
+
+# Force specific method
+./update-k8s.sh --version 1.0.1 --method kustomize
+./update-k8s.sh --version 1.0.1 --method argocd
+```
+
+**What the K8s update script does:**
+1. ✅ Auto-detects update method (Kustomize or ArgoCD)
+2. ✅ Creates database backup from PostgreSQL pod
+3. ✅ Updates image tags to specified version
+4. ✅ Applies changes via kubectl or ArgoCD
+5. ✅ Waits for rollout completion
+6. ✅ Verifies pod health
+
+#### Manual Kustomize Update
+
+```bash
+# Create temporary overlay for version
+cat > /tmp/kustomization.yaml <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ldapguard
+
+resources:
+  - ../../k8s
+
+images:
+  - name: ghcr.io/keundokki/ldapguard-api
+    newTag: "1.0.1"
+  - name: ghcr.io/keundokki/ldapguard-worker
+    newTag: "1.0.1"
+  - name: ghcr.io/keundokki/ldapguard-web
+    newTag: "1.0.1"
+EOF
+
+# Apply
+kubectl apply -k /tmp
+```
+
+#### ArgoCD Update
+
+If using ArgoCD, update the Application spec:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+spec:
+  source:
+    kustomize:
+      images:
+        - ghcr.io/keundokki/ldapguard-api:1.0.1
+        - ghcr.io/keundokki/ldapguard-worker:1.0.1
+        - ghcr.io/keundokki/ldapguard-web:1.0.1
+```
+
+Or use the CLI:
+
+```bash
+argocd app patch ldapguard --type merge -p '{
+  "spec": {
+    "source": {
+      "kustomize": {
+        "images": [
+          "ghcr.io/keundokki/ldapguard-api:1.0.1",
+          "ghcr.io/keundokki/ldapguard-worker:1.0.1",
+          "ghcr.io/keundokki/ldapguard-web:1.0.1"
+        ]
+      }
+    }
+  }
+}'
+argocd app sync ldapguard
+```
+
+---
 
 ## 🔧 Configuration
 
@@ -543,6 +861,35 @@ docker-compose exec api alembic revision --autogenerate -m "Description"
 ```bash
 docker-compose exec api pytest
 ```
+
+---
+
+## 📚 Documentation & Resources
+
+### Getting Started
+- **[Getting Started Guide](GETTING_STARTED.md)** - 🆕 Zero to first backup in 10 minutes
+- **[Installation Guide](INSTALL.md)** - Detailed step-by-step installation instructions
+- **[Installation Summary](docs/INSTALLATION_SUMMARY.md)** - Visual overview of simplified installation
+- **[Quick Reference](QUICK_REFERENCE.md)** - Command cheat sheet and quick tips
+- **README.md** (this file) - Complete feature documentation
+
+### Deployment Guides
+- **[Deployment Procedure](docs/DEPLOYMENT_PROCEDURE.md)** - Production deployment workflow
+- **[Kubernetes Guide](k8s/README.md)** - Kubernetes deployment with Kustomize
+- **[Helm Guide](helm/README.md)** - Helm chart documentation
+
+### Tools & Scripts
+- **install.sh** - Interactive one-line installer
+- **Makefile** - Common operations (make help)
+- **scripts/setup.sh** - Quick setup script
+- **scripts/validate.sh** - Configuration validator
+
+### API & Monitoring
+- **API Docs**: http://localhost:8000/docs (Swagger)
+- **ReDoc**: http://localhost:8000/redoc (Alternative API docs)
+- **Metrics**: http://localhost:8000/metrics (Prometheus)
+
+---
 
 ## 📝 License
 

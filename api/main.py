@@ -6,20 +6,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import select
 
 from api.core.audit import audit_middleware
 from api.core.config import settings
+from api.core.database import AsyncSessionLocal
 from api.core.redis import close_redis_client, get_redis_client
+from api.core.security import get_password_hash, verify_password
+from api.models.models import User, UserRole
 from api.routes import (
     api_keys,
     audit_logs,
     auth,
     backups,
+    catalog,
+    cloud_storage,
     config,
     ldap_servers,
     restores,
     scheduled_backups,
     settings as settings_routes,
+    verification,
 )
 from api.services.metrics_service import MetricsService
 
@@ -112,6 +119,40 @@ app.include_router(audit_logs.router)
 app.include_router(api_keys.router)
 app.include_router(settings_routes.router)
 app.include_router(config.router)
+app.include_router(verification.router)
+app.include_router(cloud_storage.router, prefix="/backups/cloud", tags=["cloud-storage"])
+app.include_router(catalog.router, prefix="/backups/catalog", tags=["catalog"])
+
+
+async def ensure_default_admin_user() -> None:
+    """Create default admin user on first startup if it does not exist."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.username == "admin"))
+        admin_user = result.scalar_one_or_none()
+
+        if admin_user:
+            if not verify_password("admin", admin_user.hashed_password):
+                admin_user.hashed_password = get_password_hash("admin")
+                db.add(admin_user)
+                await db.commit()
+                logger.warning(
+                    "Default admin password hash was updated to current format"
+                )
+            logger.info("Admin user already exists")
+            return
+
+        new_admin = User(
+            username="admin",
+            email="admin@example.com",
+            hashed_password=get_password_hash("admin"),
+            full_name="Administrator",
+            role=UserRole.ADMIN,
+            is_active=True,
+            ldap_auth=False,
+        )
+        db.add(new_admin)
+        await db.commit()
+        logger.info("Default admin user created successfully")
 
 
 @app.get("/")
@@ -163,6 +204,12 @@ async def startup_event():
         logger.info("Redis client initialized")
     except Exception as e:
         logger.warning(f"Redis client initialization failed: {e}")
+    
+    # Create default admin user if it doesn't exist
+    try:
+        await ensure_default_admin_user()
+    except Exception as e:
+        logger.exception(f"Failed to create default admin user: {e}")
 
 
 @app.on_event("shutdown")

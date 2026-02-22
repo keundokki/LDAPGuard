@@ -216,32 +216,48 @@ async function saveNotificationSettings(event) {
     
     const settings = [
         {
-            key: 'notification_email_enabled',
-            value: document.getElementById('emailNotifications').checked.toString()
-        },
-        {
-            key: 'notification_email',
-            value: document.getElementById('notificationEmail').value
-        },
-        {
-            key: 'notification_webhook_enabled',
-            value: document.getElementById('webhookNotifications').checked.toString()
-        },
-        {
-            key: 'notification_webhook_url',
-            value: document.getElementById('webhookUrl').value
-        },
-        {
             key: 'notification_on_backup_success',
-            value: document.getElementById('notifyBackupSuccess').checked.toString()
+            value: document.getElementById('notification_on_backup_success').checked.toString()
         },
         {
             key: 'notification_on_backup_failure',
-            value: document.getElementById('notifyBackupFailure').checked.toString()
+            value: document.getElementById('notification_on_backup_failure').checked.toString()
         },
         {
             key: 'notification_on_restore_complete',
-            value: document.getElementById('notifyRestoreComplete').checked.toString()
+            value: document.getElementById('notification_on_restore_complete').checked.toString()
+        },
+        {
+            key: 'notification_email',
+            value: document.getElementById('notification_email').value
+        },
+        {
+            key: 'notification_webhook_url',
+            value: document.getElementById('notification_webhook_url').value
+        },
+        {
+            key: 'smtp_server',
+            value: document.getElementById('smtp_server').value
+        },
+        {
+            key: 'smtp_port',
+            value: document.getElementById('smtp_port').value
+        },
+        {
+            key: 'smtp_encryption',
+            value: document.getElementById('smtp_encryption').value
+        },
+        {
+            key: 'smtp_username',
+            value: document.getElementById('smtp_username').value
+        },
+        {
+            key: 'smtp_password',
+            value: document.getElementById('smtp_password').value
+        },
+        {
+            key: 'smtp_from_email',
+            value: document.getElementById('smtp_from_email').value
         }
     ];
     
@@ -399,10 +415,22 @@ async function loadSettings() {
         
         const settings = await response.json();
         
+        // Track which secret fields have values in database
+        const secretFieldsWithValues = new Set();
+        
         // Map settings to form fields
         settings.forEach(setting => {
             const element = document.getElementById(getElementIdForSetting(setting.key));
             if (element) {
+                // For sensitive fields, show placeholder if they have a value
+                if (setting.key.includes('password') || setting.key.includes('secret') || setting.key.includes('_key')) {
+                    if (setting.value && setting.value.trim() !== '') {
+                        element.placeholder = '••••••••••••';
+                        secretFieldsWithValues.add(setting.key);
+                    }
+                    return; // Don't load actual password values for security
+                }
+                
                 if (element.type === 'checkbox') {
                     element.checked = setting.value === 'true';
                 } else {
@@ -410,6 +438,12 @@ async function loadSettings() {
                 }
             }
         });
+        
+        // Update S3 endpoint visibility based on provider
+        const provider = document.getElementById('s3_provider');
+        if (provider) {
+            provider.dispatchEvent(new Event('change'));
+        }
     } catch (error) {
         console.error('Error loading settings:', error);
     }
@@ -418,17 +452,30 @@ async function loadSettings() {
 // Helper to map setting keys to element IDs
 function getElementIdForSetting(key) {
     const mapping = {
-        'notification_email_enabled': 'emailNotifications',
-        'notification_email': 'notificationEmail',
-        'notification_webhook_enabled': 'webhookNotifications',
-        'notification_webhook_url': 'webhookUrl',
-        'notification_on_backup_success': 'notifyBackupSuccess',
-        'notification_on_backup_failure': 'notifyBackupFailure',
-        'notification_on_restore_complete': 'notifyRestoreComplete',
+        'notification_on_backup_success': 'notification_on_backup_success',
+        'notification_on_backup_failure': 'notification_on_backup_failure',
+        'notification_on_restore_complete': 'notification_on_restore_complete',
+        'notification_email': 'notification_email',
+        'notification_webhook_url': 'notification_webhook_url',
+        'smtp_server': 'smtp_server',
+        'smtp_port': 'smtp_port',
+        'smtp_encryption': 'smtp_encryption',
+        'smtp_username': 'smtp_username',
+        'smtp_password': 'smtp_password',
+        'smtp_from_email': 'smtp_from_email',
         'backup_retention_days': 'retentionDays',
         'backup_path': 'backupPath',
         'session_timeout_minutes': 'sessionTimeout',
-        'require_2fa': 'require2FA'
+        'require_2fa': 'require2FA',
+        's3_enabled': 's3_enabled',
+        's3_provider': 's3_provider',
+        's3_region': 's3_region',
+        's3_bucket': 's3_bucket',
+        's3_access_key': 's3_access_key',
+        's3_secret_key': 's3_secret_key',
+        's3_endpoint': 's3_endpoint',
+        's3_storage_class': 's3_storage_class',
+        's3_enable_versioning': 's3_enable_versioning'
     };
     return mapping[key];
 }
@@ -452,13 +499,12 @@ async function loadUsers() {
         const tbody = document.getElementById('users-tbody');
         
         if (users.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No users found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="no-data">No users found</td></tr>';
             return;
         }
         
         tbody.innerHTML = users.map(user => `
             <tr>
-                <td>${parseInt(user.id)}</td>
                 <td>${escapeHtml(user.username)}</td>
                 <td>${escapeHtml(user.email)}</td>
                 <!-- Note: role is a backend enum value (admin|operator|viewer), safe for use in CSS class -->
@@ -729,5 +775,260 @@ async function deleteUser(userId) {
     } catch (error) {
         console.error('Error deleting user:', error);
         showToast('error', error.message || 'Failed to delete user');
+    }
+}
+
+// Test email configuration
+async function testEmailConfiguration() {
+    const smtpServer = document.getElementById('smtp_server').value;
+    const smtpPort = document.getElementById('smtp_port').value;
+    const smtpUsername = document.getElementById('smtp_username').value;
+    const smtpPassword = document.getElementById('smtp_password').value;
+    const fromEmail = document.getElementById('smtp_from_email').value;
+    const recipients = document.getElementById('notification_email').value;
+    const recipientList = recipients.split(',').map(value => value.trim()).filter(Boolean).join(',');
+    
+    if (!smtpServer || !smtpPort || !fromEmail) {
+        showToast('error', 'Please fill in SMTP Server, Port, and From Email');
+        return;
+    }
+    
+    try {
+        // Find the test button and disable it
+        const testBtn = document.querySelector('#admin-notifications button[onclick*="testEmail"]') || 
+                        Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('📧 Test'));
+        if (testBtn) {
+            testBtn.disabled = true;
+            testBtn.textContent = '📧 Testing...';
+        }
+        
+        const response = await fetch('/api/settings/test-email', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                smtp_server: smtpServer,
+                smtp_port: parseInt(smtpPort),
+                smtp_username: smtpUsername,
+                smtp_password: smtpPassword,
+                smtp_encryption: document.getElementById('smtp_encryption').value,
+                from_email: fromEmail,
+                to_email: recipientList
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('success', 'Email configuration test successful!');
+        } else {
+            showToast('error', result.detail || 'Email test failed. Check your SMTP settings.');
+        }
+    } catch (error) {
+        console.error('Error testing email:', error);
+        showToast('error', 'Failed to test email configuration: ' + error.message);
+    } finally {
+        const testBtn = document.querySelector('#admin-notifications button[onclick*="testEmail"]') ||
+                        Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Testing'));
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.textContent = '📧 Test Configuration';
+        }
+    }
+}
+
+// Test webhook configuration
+async function testWebhookConfiguration() {
+    const webhookUrl = document.getElementById('notification_webhook_url').value.trim();
+
+    if (!webhookUrl) {
+        showToast('error', 'Please enter a webhook URL first');
+        return;
+    }
+
+    let testBtn = document.querySelector('#admin-notifications button[onclick*="testWebhookConfiguration"]');
+    if (!testBtn) {
+        testBtn = Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes('🔗 Test Webhook'));
+    }
+
+    try {
+        if (testBtn) {
+            testBtn.disabled = true;
+            testBtn.textContent = '🔗 Testing...';
+        }
+
+        const response = await fetch('/api/settings/test-webhook', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                webhook_url: webhookUrl
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.detail || 'Webhook test failed');
+        }
+
+        showToast('success', result.message || 'Webhook test delivered successfully');
+    } catch (error) {
+        console.error('Error testing webhook:', error);
+        showToast('error', error.message || 'Failed to test webhook configuration');
+    } finally {
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.textContent = '🔗 Test Webhook';
+        }
+    }
+}
+
+// Update S3 provider settings visibility
+function updateS3ProviderSettings() {
+    const provider = document.getElementById('s3_provider').value;
+    const endpointGroup = document.getElementById('s3_endpoint_group');
+    
+    if (provider === 'custom' || provider === 'minio') {
+        endpointGroup.style.display = 'block';
+    } else {
+        endpointGroup.style.display = 'none';
+    }
+}
+
+// Save S3 configuration
+async function saveS3Configuration(event) {
+    event.preventDefault();
+    
+    const settings = [
+        {
+            key: 's3_enabled',
+            value: document.getElementById('s3_enabled').checked.toString()
+        },
+        {
+            key: 's3_provider',
+            value: document.getElementById('s3_provider').value
+        },
+        {
+            key: 's3_region',
+            value: document.getElementById('s3_region').value
+        },
+        {
+            key: 's3_bucket',
+            value: document.getElementById('s3_bucket').value
+        },
+        {
+            key: 's3_storage_class',
+            value: document.getElementById('s3_storage_class').value
+        },
+        {
+            key: 's3_endpoint',
+            value: document.getElementById('s3_endpoint').value
+        },
+        {
+            key: 's3_enable_versioning',
+            value: document.getElementById('s3_enable_versioning').checked.toString()
+        }
+    ];
+    
+    // Only include access key if it's not empty (user changed it)
+    const accessKey = document.getElementById('s3_access_key').value;
+    if (accessKey && accessKey.trim() !== '') {
+        settings.push({
+            key: 's3_access_key',
+            value: accessKey
+        });
+    }
+    
+    // Only include secret key if it's not empty (user changed it)
+    const secretKey = document.getElementById('s3_secret_key').value;
+    if (secretKey && secretKey.trim() !== '') {
+        settings.push({
+            key: 's3_secret_key',
+            value: secretKey
+        });
+    }
+    
+    try {
+        const response = await fetch('/api/settings/batch', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save S3 configuration');
+        }
+        
+        showToast('success', 'S3 configuration saved successfully');
+    } catch (error) {
+        console.error('Error saving S3 configuration:', error);
+        showToast('error', 'Failed to save S3 configuration');
+    }
+}
+
+// Test S3 connection
+async function testS3Configuration() {
+    const s3Provider = document.getElementById('s3_provider').value;
+    const s3Region = document.getElementById('s3_region').value;
+    const s3Bucket = document.getElementById('s3_bucket').value;
+    const s3AccessKey = document.getElementById('s3_access_key').value;
+    const s3SecretKey = document.getElementById('s3_secret_key').value;
+    const s3Endpoint = document.getElementById('s3_endpoint').value;
+    
+    if (!s3Region || !s3Bucket || !s3AccessKey || !s3SecretKey) {
+        showToast('error', 'Please fill in all required S3 fields (Region, Bucket, Access Key, Secret Key)');
+        return;
+    }
+    
+    try {
+        // Find and disable the test button
+        const testBtn = document.querySelector('#admin-settings button[onclick*="testS3"]') ||
+                        Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('🧪 Test'));
+        if (testBtn) {
+            testBtn.disabled = true;
+            testBtn.textContent = '🧪 Testing...';
+        }
+        
+        const response = await fetch('/api/settings/test-s3', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                provider: s3Provider,
+                region: s3Region,
+                bucket: s3Bucket,
+                access_key: s3AccessKey,
+                secret_key: s3SecretKey,
+                endpoint: s3Endpoint || null
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('success', `S3 connection successful! Bucket '${s3Bucket}' is accessible (${s3Provider.toUpperCase()})`);
+        } else {
+            showToast('error', result.detail || 'S3 connection failed. Check your credentials and settings.');
+        }
+    } catch (error) {
+        console.error('Error testing S3:', error);
+        showToast('error', 'Failed to test S3 connection: ' + error.message);
+    } finally {
+        const testBtn = document.querySelector('#admin-settings button[onclick*="testS3"]') ||
+                        Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Testing'));
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.textContent = '🧪 Test Connection';
+        }
     }
 }

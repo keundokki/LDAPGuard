@@ -1,3 +1,4 @@
+import difflib
 import gzip
 import io
 import logging
@@ -15,7 +16,8 @@ from api.core.database import get_db
 from api.core.encryption import AESEncryption
 from api.core.redis import get_redis_client
 from api.core.security import get_current_user
-from api.models.models import Backup, BackupStatus, BackupType, LDAPServer
+from api.models.models import Backup, BackupCategory, BackupStatus, BackupType, LDAPServer
+from api.schemas.schemas import BackupCategory as BackupCategorySchema
 from api.schemas.schemas import BackupCreate, BackupResponse
 
 router = APIRouter(prefix="/backups", tags=["Backups"])
@@ -26,6 +28,35 @@ class BatchDeleteRequest(BaseModel):
     """Request model for batch deletion."""
 
     backup_ids: List[int]
+
+
+def _check_backup_category_access(user, category: BackupCategory):
+    """Check if user has access to backup category."""
+    user_role = user.role.value
+
+    # ADMIN has access to everything
+    if user_role == "admin":
+        return True
+
+    # BACKUP_ADMIN has access to all backup types except full_server
+    if user_role == "backup_admin" and category != BackupCategory.FULL_SERVER:
+        return True
+
+    # SECURITY_ADMIN has access to schema, config, acl, and certificate backups (sensitive data)
+    if user_role == "security_admin" and category in [
+        BackupCategory.SCHEMA,
+        BackupCategory.CONFIG,
+        BackupCategory.ACL,
+        BackupCategory.CERTIFICATES,
+    ]:
+        return True
+
+    # OPERATOR has access to directory and incremental backups only
+    if user_role == "operator" and category == BackupCategory.DIRECTORY:
+        return True
+
+    # Default: deny access
+    return False
 
 
 def _read_backup_bytes(backup: Backup) -> bytes:
@@ -66,16 +97,46 @@ def _decode_backup_content(
     text = raw_data.decode("utf-8", errors="replace")
     truncated = False
 
-    if max_bytes and len(text.encode("utf-8")) > max_bytes:
+    # Only truncate by bytes if max_bytes > 0
+    if max_bytes > 0 and len(text.encode("utf-8")) > max_bytes:
         text = text.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore")
         truncated = True
 
     lines = text.splitlines()
-    if max_lines and len(lines) > max_lines:
+    # Only truncate by lines if max_lines > 0
+    if max_lines > 0 and len(lines) > max_lines:
         text = "\n".join(lines[:max_lines])
         truncated = True
 
     return text, truncated, len(text.splitlines())
+
+
+def _diff_backup_content(
+    base_backup: Backup,
+    other_backup: Backup,
+    context_lines: int,
+    max_lines: int,
+) -> tuple[str, bool, int]:
+    base_text = _read_backup_bytes(base_backup).decode("utf-8", errors="replace")
+    other_text = _read_backup_bytes(other_backup).decode("utf-8", errors="replace")
+
+    diff_lines = list(
+        difflib.unified_diff(
+            base_text.splitlines(),
+            other_text.splitlines(),
+            fromfile=f"backup_{base_backup.id}",
+            tofile=f"backup_{other_backup.id}",
+            n=context_lines,
+            lineterm="",
+        )
+    )
+
+    truncated = False
+    if max_lines > 0 and len(diff_lines) > max_lines:
+        diff_lines = diff_lines[:max_lines]
+        truncated = True
+
+    return "\n".join(diff_lines), truncated, len(diff_lines)
 
 
 @router.get("/", response_model=List[BackupResponse])
@@ -87,6 +148,7 @@ async def list_backups(
     backup_type: Optional[BackupType] = Query(None, description="Filter by type"),
     search: Optional[str] = Query(None, description="Search in server name"),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """List all backups with optional filtering."""
     query = select(Backup)
@@ -111,11 +173,16 @@ async def list_backups(
 
     result = await db.execute(query)
     backups = result.scalars().all()
+    
     return backups
 
 
 @router.get("/{backup_id}", response_model=BackupResponse)
-async def get_backup(backup_id: int, db: AsyncSession = Depends(get_db)):
+async def get_backup(
+    backup_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """Get backup by ID."""
     result = await db.execute(select(Backup).where(Backup.id == backup_id))
     backup = result.scalar_one_or_none()
@@ -131,17 +198,11 @@ async def get_backup(backup_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/{backup_id}/content")
 async def get_backup_content(
     backup_id: int,
-    max_lines: int = Query(200, ge=1, le=5000),
-    max_bytes: int = Query(200000, ge=1024, le=2000000),
+    max_lines: int = Query(200, ge=0, le=5000),
+    max_bytes: int = Query(200000, ge=0, le=2000000),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user.role.value not in ["admin", "operator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and operators can view backups",
-        )
-
     result = await db.execute(select(Backup).where(Backup.id == backup_id))
     backup = result.scalar_one_or_none()
 
@@ -150,11 +211,16 @@ async def get_backup_content(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found"
         )
 
+
     if backup.status != BackupStatus.COMPLETED or not backup.file_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Backup content is not available",
         )
+
+    # When max_lines is 0 (no limit), also set max_bytes to 0 (no limit)
+    if max_lines == 0:
+        max_bytes = 0
 
     content, truncated, lines = _decode_backup_content(
         backup, max_bytes=max_bytes, max_lines=max_lines
@@ -173,12 +239,6 @@ async def download_backup_content(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user.role.value not in ["admin", "operator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and operators can download backups",
-        )
-
     result = await db.execute(select(Backup).where(Backup.id == backup_id))
     backup = result.scalar_one_or_none()
 
@@ -203,6 +263,48 @@ async def download_backup_content(
     )
 
 
+@router.get("/{backup_id}/diff")
+async def diff_backup_content(
+    backup_id: int,
+    against_id: int = Query(..., ge=1),
+    context: int = Query(3, ge=0, le=10),
+    max_lines: int = Query(5000, ge=0, le=20000),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    base_result = await db.execute(select(Backup).where(Backup.id == backup_id))
+    base_backup = base_result.scalar_one_or_none()
+
+    other_result = await db.execute(select(Backup).where(Backup.id == against_id))
+    other_backup = other_result.scalar_one_or_none()
+
+    if not base_backup or not other_backup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found"
+        )
+
+    if (
+        base_backup.status != BackupStatus.COMPLETED
+        or other_backup.status != BackupStatus.COMPLETED
+        or not base_backup.file_path
+        or not other_backup.file_path
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Backup content is not available",
+        )
+
+    diff_text, truncated, lines = _diff_backup_content(
+        base_backup, other_backup, context, max_lines
+    )
+
+    return {
+        "diff": diff_text,
+        "truncated": truncated,
+        "lines": lines,
+    }
+
+
 @router.post("/", response_model=BackupResponse, status_code=status.HTTP_201_CREATED)
 async def create_backup(
     backup_data: BackupCreate,
@@ -211,13 +313,6 @@ async def create_backup(
     current_user=Depends(get_current_user),
 ):
     """Create a new backup job."""
-    # Only admins and operators can create backups
-    if current_user.role.value not in ["admin", "operator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and operators can create backups",
-        )
-
     # Verify LDAP server exists
     result = await db.execute(
         select(LDAPServer).where(LDAPServer.id == backup_data.ldap_server_id)
@@ -229,12 +324,46 @@ async def create_backup(
             status_code=status.HTTP_404_NOT_FOUND, detail="LDAP server not found"
         )
 
+    # Validate incremental backup requirements
+    parent_backup = None
+    if backup_data.backup_type == BackupType.INCREMENTAL:
+        if not backup_data.parent_backup_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="parent_backup_id is required for incremental backups",
+            )
+
+        # Verify parent backup exists and is completed
+        result = await db.execute(
+            select(Backup).where(Backup.id == backup_data.parent_backup_id)
+        )
+        parent_backup = result.scalar_one_or_none()
+
+        if not parent_backup:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Parent backup not found"
+            )
+
+        if parent_backup.status != BackupStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent backup must be completed before creating incremental backup",
+            )
+
+        if parent_backup.ldap_server_id != backup_data.ldap_server_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent backup must be from the same LDAP server",
+            )
+
     # Create backup record
     new_backup = Backup(
         ldap_server_id=backup_data.ldap_server_id,
         backup_type=backup_data.backup_type,
+        category=backup_data.category,
         encrypted=backup_data.encrypted,
         compression_enabled=backup_data.compression_enabled,
+        parent_backup_id=backup_data.parent_backup_id,
         status=BackupStatus.PENDING,
         created_by=current_user.id,
     )
@@ -268,13 +397,6 @@ async def delete_backup(
     current_user=Depends(get_current_user),
 ):
     """Delete a backup."""
-    # Only admins and operators can delete backups
-    if current_user.role.value not in ["admin", "operator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and operators can delete backups",
-        )
-
     result = await db.execute(select(Backup).where(Backup.id == backup_id))
     backup = result.scalar_one_or_none()
 

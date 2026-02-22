@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +19,33 @@ from api.schemas.schemas import (
 router = APIRouter(prefix="/scheduled-backups", tags=["Scheduled Backups"])
 
 
+def _enrich_scheduled_backup(schedule: ScheduledBackup) -> dict:
+    """Add next_run and previous_run computed fields to a scheduled backup."""
+    data = {
+        "id": schedule.id,
+        "name": schedule.name,
+        "ldap_server_id": schedule.ldap_server_id,
+        "backup_type": schedule.backup_type.value if hasattr(schedule.backup_type, 'value') else schedule.backup_type,
+        "cron_expression": schedule.cron_expression,
+        "retention_days": schedule.retention_days,
+        "is_active": schedule.is_active,
+        "created_at": schedule.created_at,
+        "updated_at": schedule.updated_at,
+        "next_run": None,
+        "previous_run": None,
+    }
+
+    try:
+        cron = croniter(schedule.cron_expression, datetime.now())
+        data["next_run"] = cron.get_next(datetime)
+        cron = croniter(schedule.cron_expression, datetime.now())
+        data["previous_run"] = cron.get_prev(datetime)
+    except Exception:
+        pass
+
+    return data
+
+
 @router.get("/", response_model=List[ScheduledBackupResponse])
 async def list_scheduled_backups(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
@@ -30,7 +58,7 @@ async def list_scheduled_backups(
         .order_by(ScheduledBackup.created_at.desc())
     )
     scheduled = result.scalars().all()
-    return scheduled
+    return [_enrich_scheduled_backup(s) for s in scheduled]
 
 
 @router.get("/{schedule_id}", response_model=ScheduledBackupResponse)
@@ -47,7 +75,7 @@ async def get_scheduled_backup(schedule_id: int, db: AsyncSession = Depends(get_
             detail="Scheduled backup not found",
         )
 
-    return schedule
+    return _enrich_scheduled_backup(schedule)
 
 
 @router.post(
@@ -86,7 +114,7 @@ async def create_scheduled_backup(
     await db.commit()
     await db.refresh(new_schedule)
 
-    return new_schedule
+    return _enrich_scheduled_backup(new_schedule)
 
 
 @router.put("/{schedule_id}", response_model=ScheduledBackupResponse)
@@ -128,7 +156,7 @@ async def update_scheduled_backup(
     await db.commit()
     await db.refresh(schedule)
 
-    return schedule
+    return _enrich_scheduled_backup(schedule)
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

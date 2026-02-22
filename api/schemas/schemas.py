@@ -1,12 +1,14 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, EmailStr
 
 
 class UserRole(str, Enum):
     ADMIN = "admin"
+    BACKUP_ADMIN = "backup_admin"
+    SECURITY_ADMIN = "security_admin"
     OPERATOR = "operator"
     VIEWER = "viewer"
 
@@ -21,6 +23,15 @@ class BackupStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class BackupCategory(str, Enum):
+    DIRECTORY = "directory"
+    SCHEMA = "schema"
+    CONFIG = "config"
+    ACL = "acl"
+    CERTIFICATES = "certificates"
+    FULL_SERVER = "full_server"
 
 
 # User schemas
@@ -108,12 +119,13 @@ class LDAPServerResponse(BaseModel):
 class BackupBase(BaseModel):
     ldap_server_id: int
     backup_type: BackupType = BackupType.FULL
+    category: BackupCategory = BackupCategory.DIRECTORY
     encrypted: bool = True
     compression_enabled: bool = True
 
 
 class BackupCreate(BackupBase):
-    pass
+    parent_backup_id: Optional[int] = None  # For incremental backups
 
 
 class BackupResponse(BackupBase):
@@ -128,6 +140,18 @@ class BackupResponse(BackupBase):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     created_at: datetime
+    retry_count: int = 0
+    max_retries: int = 3
+    next_retry_at: Optional[datetime] = None
+    checksum: Optional[str] = None
+    checksum_algorithm: Optional[str] = "sha256"
+    verified_at: Optional[datetime] = None
+    verification_status: Optional[str] = None
+    cloud_uploaded: bool = False
+    cloud_storage_path: Optional[str] = None
+    cloud_uploaded_at: Optional[datetime] = None
+    cloud_provider: Optional[str] = None
+    cloud_storage_class: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -186,6 +210,8 @@ class ScheduledBackupResponse(ScheduledBackupBase):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
+    next_run: Optional[datetime] = None
+    previous_run: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -277,3 +303,87 @@ class ConfigurationImport(BaseModel):
     servers: Optional[list] = []
     scheduled_backups: Optional[list] = []
     users: Optional[list] = []
+
+
+# Cloud storage schemas
+class CloudStorageUploadRequest(BaseModel):
+    """Request model for cloud storage upload (currently no parameters needed)."""
+    pass
+
+
+class CloudStorageUploadResponse(BaseModel):
+    backup_id: int
+    success: bool
+    message: str
+    cloud_storage_path: str
+    cloud_provider: str
+    cloud_storage_class: str
+    uploaded_at: datetime
+
+
+class CloudStorageInfo(BaseModel):
+    key: str
+    size: int
+    last_modified: str
+    storage_class: str
+
+
+class CloudStorageTestResponse(BaseModel):
+    success: bool
+    message: str
+    enabled: bool
+    provider: Optional[str] = None
+    bucket: Optional[str] = None
+    region: Optional[str] = None
+    error: Optional[str] = None
+
+
+# Backup Catalog & Search schemas
+class BackupSearchParams(BaseModel):
+    """Advanced search and filter parameters for backups."""
+    search: Optional[str] = None  # Search in server name, filename
+    server_id: Optional[int] = None
+    status: Optional[str] = None
+    backup_type: Optional[str] = None
+    category: Optional[str] = None
+    verification_status: Optional[str] = None
+    cloud_uploaded: Optional[bool] = None
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
+    completed_after: Optional[datetime] = None
+    completed_before: Optional[datetime] = None
+    min_size: Optional[int] = None  # In bytes
+    max_size: Optional[int] = None  # In bytes
+    min_entries: Optional[int] = None
+    max_entries: Optional[int] = None
+    sort_by: Optional[str] = "created_at"  # created_at, size, entry_count, completed_at
+    sort_order: Optional[str] = "desc"  # asc, desc
+    skip: int = 0
+    limit: int = 100
+
+
+class BackupCatalogStats(BaseModel):
+    """Statistics for backup catalog."""
+    total_backups: int
+    total_size: int
+    total_entries: int
+    backups_by_status: Dict[str, int]
+    backups_by_type: Dict[str, int]
+    backups_by_category: Dict[str, int]
+    backups_by_server: Dict[str, int]
+    verified_backups: int
+    cloud_uploaded_backups: int
+    failed_backups: int
+    oldest_backup: Optional[datetime] = None
+    newest_backup: Optional[datetime] = None
+    average_backup_size: float
+    largest_backup_size: int
+    smallest_backup_size: int
+
+
+class BackupExportResponse(BaseModel):
+    """Response for backup export."""
+    format: str
+    total_records: int
+    data: str  # CSV or JSON string
+    filename: str

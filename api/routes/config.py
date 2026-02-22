@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
-from api.core.security import get_current_user
+from api.core.security import get_current_user, pwd_hasher
 from api.models.models import (
     LDAPServer,
     ScheduledBackup,
+    SystemSetting,
     User,
 )
 from api.schemas.schemas import (
@@ -16,8 +17,6 @@ from api.schemas.schemas import (
 )
 
 router = APIRouter(prefix="/config", tags=["Configuration"])
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("/export", response_model=ConfigurationExport)
@@ -172,7 +171,7 @@ async def import_configuration(
                 if not existing:
                     # Create user with a default password (must be changed)
                     default_password = "changeme123"
-                    hashed_password = pwd_context.hash(default_password)
+                    hashed_password = pwd_hasher.hash(default_password)
 
                     user = User(
                         username=user_data.get("username"),
@@ -192,4 +191,38 @@ async def import_configuration(
     return {
         "message": "Configuration import completed",
         "imported": imported_counts,
+    }
+
+
+@router.get("/features")
+async def get_enabled_features(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get enabled feature flags (e.g., cloud storage)."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Try to get S3 enabled setting from database
+    result = await db.execute(
+        select(SystemSetting).where(SystemSetting.key == "s3_enabled")
+    )
+    s3_setting = result.scalar_one_or_none()
+    
+    logger.info(f"S3 setting from DB: {s3_setting}")
+    if s3_setting:
+        logger.info(f"S3 setting value: {s3_setting.value}, type: {type(s3_setting.value)}")
+    
+    # Check if S3 is enabled in database, fall back to environment variable
+    s3_enabled = False
+    if s3_setting:
+        s3_enabled = s3_setting.value.lower() == "true"
+        logger.info(f"S3 enabled (from DB): {s3_enabled}")
+    else:
+        s3_enabled = settings.S3_ENABLED
+        logger.info(f"S3 enabled (from env): {s3_enabled}")
+    
+    return {
+        "cloud_storage_enabled": s3_enabled,
+        "cloud_provider": "s3" if s3_enabled else None,
     }
