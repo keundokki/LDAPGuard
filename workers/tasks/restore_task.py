@@ -7,7 +7,7 @@ from sqlalchemy import select
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.encryption import decrypt_ldap_password
-from api.models.models import Backup, BackupStatus, LDAPServer, RestoreJob, SystemSetting
+from api.models.models import Backup, BackupStatus, LDAPServer, RestoreJob, SystemSetting  # noqa: E501
 from api.services.backup_service import BackupService
 from api.services.email_service import EmailService
 from api.services.ldap_service import LDAPService
@@ -25,10 +25,10 @@ async def get_notification_recipients(db):
         select(SystemSetting).where(SystemSetting.key == "notification_email")
     )
     setting = result.scalar_one_or_none()
-    
+
     if not setting or not setting.value:
         return []
-    
+
     # Parse comma-separated email list
     recipients = [email.strip() for email in setting.value.split(",") if email.strip()]
     return recipients
@@ -78,7 +78,7 @@ async def perform_restore(restore_id: int):
         )
 
         logger.info(
-            "Notification settings loaded: recipients=%s webhook_url=%s smtp_host=%s notify_restore_complete=%s",
+            "Notification settings loaded: recipients=%s webhook_url=%s smtp_host=%s notify_restore_complete=%s",  # noqa: E501
             len(recipients),
             settings_map.get("notification_webhook_url"),
             settings_map.get("smtp_server"),
@@ -135,30 +135,30 @@ async def perform_restore(restore_id: int):
             # Verify backup integrity before restore if enabled
             if settings.BACKUP_VERIFY_BEFORE_RESTORE and backup.file_path:
                 logger.info(f"Verifying backup {backup.id} before restore")
-                
-                is_valid, verification_msg = verification_service.comprehensive_verification(
+
+                is_valid, verification_msg = verification_service.comprehensive_verification(  # noqa: E501
                     backup.file_path,
                     expected_checksum=backup.checksum,
                     expected_size=backup.file_size,
                     validate_syntax=True
                 )
-                
+
                 if not is_valid:
                     error_msg = f"Backup verification failed: {verification_msg}"
                     logger.error(f"Restore {restore_id}: {error_msg}")
-                    
+
                     restore_job.status = BackupStatus.FAILED
                     restore_job.error_message = error_msg
                     restore_job.completed_at = datetime.utcnow()
                     await db.commit()
-                    
+
                     # Send failure notifications
                     await email_service.send_restore_failed(
                         restore_id, backup.id, error_msg, recipients
                     )
                     MetricsService.record_restore_failed()
                     return
-                    
+
                 logger.info(f"Backup {backup.id} verification passed")
 
             # Auto-download from cloud storage if local file is missing
@@ -167,58 +167,60 @@ async def perform_restore(restore_id: int):
                 local_file_exists = Path(backup.file_path).exists()
             else:
                 local_file_exists = False
-            
-            if not local_file_exists and backup.cloud_uploaded and backup.cloud_storage_path:
-                logger.info(f"Restore {restore_id}: Local file missing, auto-downloading from cloud storage: {backup.cloud_storage_path}")
-                
+
+            if not local_file_exists and backup.cloud_uploaded and backup.cloud_storage_path:  # noqa: E501
+                logger.info(
+                    f"Restore {restore_id}: Local file missing, auto-downloading from cloud storage: {backup.cloud_storage_path}")  # noqa: E501
+
                 try:
                     # Generate local file path
                     backup_dir = Path(settings.BACKUP_DIR)
                     backup_dir.mkdir(parents=True, exist_ok=True)
-                    
+
                     # Extract filename from cloud path
                     filename = Path(backup.cloud_storage_path).name
                     destination_path = str(backup_dir / filename)
-                    
+
                     # Download from S3
-                    download_result = await storage_service.download_backup(
+                    await storage_service.download_backup(
                         object_key=backup.cloud_storage_path,
                         destination_path=destination_path,
                         db=db
                     )
-                    
+
                     # Update backup record with local file path
                     backup.file_path = destination_path
                     await db.commit()
-                    
-                    logger.info(f"Restore {restore_id}: Successfully downloaded backup from cloud storage to {destination_path}")
-                    
+
+                    logger.info(
+                        f"Restore {restore_id}: Successfully downloaded backup from cloud storage to {destination_path}")  # noqa: E501
+
                 except Exception as download_error:
-                    error_msg = f"Failed to download backup from cloud storage: {str(download_error)}"
+                    error_msg = f"Failed to download backup from cloud storage: {str(download_error)}"  # noqa: E501
                     logger.error(f"Restore {restore_id}: {error_msg}")
-                    
+
                     restore_job.status = BackupStatus.FAILED
                     restore_job.error_message = error_msg
                     restore_job.completed_at = datetime.utcnow()
                     await db.commit()
-                    
+
                     # Send failure notifications
                     await email_service.send_restore_failed(
                         restore_id, backup.id, error_msg, recipients
                     )
                     MetricsService.record_restore_failed()
                     return
-            
+
             # Verify we have a file to restore
             if not backup.file_path or not Path(backup.file_path).exists():
-                error_msg = "Backup file not found locally and not available in cloud storage"
+                error_msg = "Backup file not found locally and not available in cloud storage"  # noqa: E501
                 logger.error(f"Restore {restore_id}: {error_msg}")
-                
+
                 restore_job.status = BackupStatus.FAILED
                 restore_job.error_message = error_msg
                 restore_job.completed_at = datetime.utcnow()
                 await db.commit()
-                
+
                 # Send failure notifications
                 await email_service.send_restore_failed(
                     restore_id, backup.id, error_msg, recipients

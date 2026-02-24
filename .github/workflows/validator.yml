@@ -1,0 +1,164 @@
+# Validator pipeline for PRs and develop pushes.
+# This mirrors the Jenkins validator: Trivy scans, container build, tests, SonarCloud, quality gate.
+name: Validator
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+# Prevent overlapping validator runs on the same branch.
+concurrency:
+  group: validator-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout source so we can build images and scan the workspace.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Read the repo version and append -SNAPSHOT to mimic Jenkins validator tags.
+      - name: Read version
+        id: version
+        run: |
+          version=$(cat VERSION)
+          echo "version=${version}-SNAPSHOT" >> "$GITHUB_OUTPUT"
+
+      # Install Trivy CLI so we can run security scans.
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.1
+
+      # Configure Python to install dependencies for Sonar analysis (if needed).
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Install Python dependencies for auxiliary tooling (Sonar analysis, etc.).
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Trivy vulnerability scan (CRITICAL only) to match validator requirements.
+      - name: Trivy filesystem scan (vuln)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      # Trivy license scan (HIGH + CRITICAL) to mirror Jenkins license policy.
+      - name: Trivy filesystem scan (licenses)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: license
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      # Enable Buildx for caching and multi-layer builds.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build API image with SNAPSHOT tag (no push).
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.api
+          load: true
+          push: false
+          tags: ldapguard-api:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Web image with SNAPSHOT tag (no push).
+      - name: Build Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.web
+          load: true
+          push: false
+          tags: ldapguard-web:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Worker image with SNAPSHOT tag (no push).
+      - name: Build Worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.worker
+          load: true
+          push: false
+          tags: ldapguard-worker:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Run pytest inside the API container to mimic Jenkins containerized tests.
+      - name: Run tests inside API image
+        run: |
+          docker run --rm \
+            -v "$PWD/tests:/app/tests" \
+            -v "$PWD:/app" \
+            -e DATABASE_URL=sqlite+aiosqlite:///./test.db \
+            -e REDIS_URL=redis://localhost:6379 \
+            -e SECRET_KEY=test-secret-key-minimum-32-characters \
+            -e ENCRYPTION_KEY=test-encryption-key-32-bytes-minimum \
+            ldapguard-api:${{ steps.version.outputs.version }} \
+            pytest tests
+
+      # Run SonarCloud analysis for static quality checks.
+      - name: SonarCloud analysis
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.organization=keundokki
+            -Dsonar.projectKey=keundokki_LDAPGuard
+
+      # Enforce SonarCloud quality gate with a 20 minute timeout.
+      - name: SonarCloud Quality Gate
+        uses: SonarSource/sonarcloud-quality-gate-action@v1.1.0
+        timeout-minutes: 20
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Always clean up local images to keep the runner tidy.
+      - name: Cleanup Docker images
+        if: always()
+        run: |
+          docker image rm -f \
+            ldapguard-api:${{ steps.version.outputs.version }} \
+            ldapguard-web:${{ steps.version.outputs.version }} \
+            ldapguard-worker:${{ steps.version.outputs.version }} || true
+
+      # Comment on PRs if any step above failed to mirror Jenkins MR comments.
+      - name: Comment on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `CI validation failed. Please review Trivy, tests, or SonarCloud output for details.`
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            })

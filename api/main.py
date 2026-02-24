@@ -120,7 +120,10 @@ app.include_router(api_keys.router)
 app.include_router(settings_routes.router)
 app.include_router(config.router)
 app.include_router(verification.router)
-app.include_router(cloud_storage.router, prefix="/backups/cloud", tags=["cloud-storage"])
+app.include_router(
+    cloud_storage.router,
+    prefix="/backups/cloud",
+    tags=["cloud-storage"])
 app.include_router(catalog.router, prefix="/backups/catalog", tags=["catalog"])
 
 
@@ -204,7 +207,7 @@ async def startup_event():
         logger.info("Redis client initialized")
     except Exception as e:
         logger.warning(f"Redis client initialization failed: {e}")
-    
+
     # Create default admin user if it doesn't exist
     try:
         await ensure_default_admin_user()

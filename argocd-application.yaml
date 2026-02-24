@@ -1,0 +1,22 @@
+# ArgoCD Application for LDAPGuard (manual sync).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ldapguard
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/keundokki/LDAPGuard.git
+    targetRevision: main
+    path: helm
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ldapguard
+  syncPolicy:
+    # Manual sync only. Do not enable automated sync.
+    syncOptions:
+      - CreateNamespace=true

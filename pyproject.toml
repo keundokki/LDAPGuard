@@ -1,3 +1,8 @@
+[project]
+# PEP 621 metadata used by CI/CD version bumping.
+name = "ldapguard"
+version = "1.0.0"
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]

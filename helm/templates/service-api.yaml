@@ -1,0 +1,18 @@
+# ClusterIP service for API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-api
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.service.api.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.api.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "ldapguard.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api

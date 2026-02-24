@@ -1,0 +1,20 @@
+# Helm test pod to validate API readiness post-install.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "ldapguard.fullname" . }}-test-connection"
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl:8.7.1
+      command:
+        - sh
+        - -c
+        - >-
+          curl -sf http://{{ include "ldapguard.fullname" . }}-api:{{ .Values.service.api.port }}/health
+  restartPolicy: Never

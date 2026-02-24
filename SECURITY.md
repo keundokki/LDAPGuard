@@ -10,9 +10,9 @@ Currently supported versions with security updates:
 
 ## Recent Security Updates (v1.0.1)
 
-**February 2024** - All critical and high-severity vulnerabilities patched:
+**February 2026** - All critical and high-severity vulnerabilities patched:
 
-- ✅ **cryptography** updated to 42.0.4 (was 41.0.7)
+- ✅ **cryptography** updated to 46.0.5 (was 42.0.4)
   - Fixed NULL pointer dereference vulnerability
   - Fixed Bleichenbacher timing oracle attack
 - ✅ **fastapi** updated to 0.109.1 (was 0.104.1)

@@ -16,8 +16,7 @@ from api.core.database import get_db
 from api.core.encryption import AESEncryption
 from api.core.redis import get_redis_client
 from api.core.security import get_current_user
-from api.models.models import Backup, BackupCategory, BackupStatus, BackupType, LDAPServer
-from api.schemas.schemas import BackupCategory as BackupCategorySchema
+from api.models.models import Backup, BackupCategory, BackupStatus, BackupType, LDAPServer  # noqa: E501
 from api.schemas.schemas import BackupCreate, BackupResponse
 
 router = APIRouter(prefix="/backups", tags=["Backups"])
@@ -42,7 +41,8 @@ def _check_backup_category_access(user, category: BackupCategory):
     if user_role == "backup_admin" and category != BackupCategory.FULL_SERVER:
         return True
 
-    # SECURITY_ADMIN has access to schema, config, acl, and certificate backups (sensitive data)
+    # SECURITY_ADMIN has access to schema, config, acl, and certificate
+    # backups (sensitive data)
     if user_role == "security_admin" and category in [
         BackupCategory.SCHEMA,
         BackupCategory.CONFIG,
@@ -173,7 +173,7 @@ async def list_backups(
 
     result = await db.execute(query)
     backups = result.scalars().all()
-    
+
     return backups
 
 
@@ -210,7 +210,6 @@ async def get_backup_content(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found"
         )
-
 
     if backup.status != BackupStatus.COMPLETED or not backup.file_path:
         raise HTTPException(
@@ -347,7 +346,7 @@ async def create_backup(
         if parent_backup.status != BackupStatus.COMPLETED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Parent backup must be completed before creating incremental backup",
+                detail="Parent backup must be completed before creating incremental backup",  # noqa: E501
             )
 
         if parent_backup.ldap_server_id != backup_data.ldap_server_id:

@@ -1,0 +1,46 @@
+{{- if .Values.autoscaling.enabled }}
+# HorizontalPodAutoscaler for API and Web workloads.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-api
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ldapguard.fullname" . }}-api
+  minReplicas: {{ .Values.autoscaling.api.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.api.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.api.targetCPUUtilizationPercentage }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-web
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ldapguard.fullname" . }}-web
+  minReplicas: {{ .Values.autoscaling.web.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.web.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.web.targetCPUUtilizationPercentage }}
+{{- end }}

@@ -148,8 +148,7 @@ class WebhookService:
         if event == "backup.completed":
             return (
                 f"[LDAPGuard] Backup completed for {payload.get('server_name')}"
-                f" (id: {payload.get('backup_id')}, entries: {payload.get('entry_count')})."
-            )
+                f" (id: {payload.get('backup_id')}, entries: {payload.get('entry_count')}).")  # noqa: E501
         if event == "backup.failed":
             return (
                 f"[LDAPGuard] Backup failed for {payload.get('server_name')}"
@@ -162,9 +161,8 @@ class WebhookService:
             )
         if event == "restore.completed":
             return (
-                f"[LDAPGuard] Restore completed (restore id: {payload.get('restore_id')},"
-                f" backup id: {payload.get('backup_id')}, entries: {payload.get('entries_restored')})."
-            )
+                f"[LDAPGuard] Restore completed (restore id: {payload.get('restore_id')},"  # noqa: E501
+                f" backup id: {payload.get('backup_id')}, entries: {payload.get('entries_restored')}).")  # noqa: E501
         return f"[LDAPGuard] {event}"
 
     def _get_timestamp(self) -> str:

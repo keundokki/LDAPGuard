@@ -90,7 +90,7 @@ class EmailService:
             return
 
         subject = f"🔄 Backup Started: {server_name}"
-        
+
         html_content = self._render_template(
             "backup_started.html",
             {
@@ -128,7 +128,7 @@ View backup: {settings.APP_URL}/backups
             return
 
         subject = f"✅ Backup Completed: {server_name}"
-        
+
         # Format file size
         file_size_mb = file_size / (1024 * 1024)
         duration_min = int(duration / 60)
@@ -141,7 +141,7 @@ View backup: {settings.APP_URL}/backups
                 "server_name": server_name,
                 "entry_count": entry_count,
                 "file_size": f"{file_size_mb:.2f} MB",
-                "duration": f"{duration_min}m {duration_sec}s" if duration_min > 0 else f"{duration_sec}s",
+                "duration": f"{duration_min}m {duration_sec}s" if duration_min > 0 else f"{duration_sec}s",  # noqa: E501
                 "backup_url": f"{settings.APP_URL}/backups",
             },
         )
@@ -163,10 +163,10 @@ View backup: {settings.APP_URL}/backups
         await self._send_email(recipients, subject, html_content, text_content)
 
     async def send_backup_failed(
-        self, 
-        backup_id: int, 
-        server_name: str, 
-        error: str, 
+        self,
+        backup_id: int,
+        server_name: str,
+        error: str,
         recipients: List[str],
         will_retry: bool = False,
         retry_count: int = 0,
@@ -174,7 +174,7 @@ View backup: {settings.APP_URL}/backups
         retry_delay: int = 0
     ):
         """Send notification when backup fails.
-        
+
         Args:
             backup_id: ID of the backup
             server_name: Name of the LDAP server
@@ -192,10 +192,10 @@ View backup: {settings.APP_URL}/backups
             subject = f"⚠️ Backup Failed (Will Retry): {server_name}"
         else:
             subject = f"❌ Backup Failed: {server_name}"
-        
+
         # Calculate retry time for display
         retry_minutes = retry_delay // 60 if retry_delay > 0 else 0
-        
+
         # Build retry-specific content
         if will_retry:
             icon = "⚠️"
@@ -206,13 +206,13 @@ View backup: {settings.APP_URL}/backups
                 <h2>🔄 Automatic Retry Scheduled</h2>
                 <p><strong>Retry Attempt:</strong> {retry_count} of {max_retries}</p>
                 <p><strong>Next Retry In:</strong> {retry_minutes} minutes</p>
-                <p style="margin-top: 15px;">This backup will be automatically retried. You'll receive another notification when the retry attempt completes.</p>
+                <p style="margin-top: 15px;">This backup will be automatically retried. You'll receive another notification when the retry attempt completes.</p>  # noqa: E501
             </div>
             '''
             retry_info_rows = f'''
                 <div class="info-row">
                     <div class="info-label">Retry Status:</div>
-                    <div class="info-value"><strong>Scheduled ({retry_count}/{max_retries})</strong></div>
+                    <div class="info-value"><strong>Scheduled ({retry_count}/{max_retries})</strong></div>  # noqa: E501
                 </div>
                 <div class="info-row">
                     <div class="info-label">Next Attempt:</div>
@@ -225,7 +225,7 @@ View backup: {settings.APP_URL}/backups
             action_required = "Immediate attention may be required."
             retry_warning = ""
             retry_info_rows = ""
-        
+
         html_content = self._render_template(
             "backup_failed.html",
             {
@@ -256,7 +256,7 @@ Next retry in: {retry_minutes} minutes
 This backup will be automatically retried. You will receive another notification
 when the retry attempt completes.
 """
-        
+
         text_content = f"""
 Backup Failed
 
@@ -286,7 +286,7 @@ Troubleshooting:
             return
 
         subject = f"🔄 Restore Started: Backup #{backup_id}"
-        
+
         html_content = self._render_template(
             "restore_started.html",
             {
@@ -323,7 +323,7 @@ View restore: {settings.APP_URL}/restores
             return
 
         subject = f"✅ Restore Completed: Backup #{backup_id}"
-        
+
         duration_min = int(duration / 60)
         duration_sec = int(duration % 60)
 
@@ -333,7 +333,7 @@ View restore: {settings.APP_URL}/restores
                 "restore_id": restore_id,
                 "backup_id": backup_id,
                 "entries_restored": entries_restored,
-                "duration": f"{duration_min}m {duration_sec}s" if duration_min > 0 else f"{duration_sec}s",
+                "duration": f"{duration_min}m {duration_sec}s" if duration_min > 0 else f"{duration_sec}s",  # noqa: E501
                 "restore_url": f"{settings.APP_URL}/restores",
             },
         )
@@ -361,7 +361,7 @@ View restore: {settings.APP_URL}/restores
             return
 
         subject = f"❌ Restore Failed: Backup #{backup_id}"
-        
+
         html_content = self._render_template(
             "restore_failed.html",
             {
@@ -449,11 +449,11 @@ Troubleshooting:
         if template_path.exists():
             with open(template_path, "r", encoding="utf-8") as f:
                 template = f.read()
-            
+
             # Simple template rendering (replace {{variable}} with value)
             for key, value in context.items():
                 template = template.replace(f"{{{{{key}}}}}", str(value))
-            
+
             return template
 
         # Fallback to basic HTML if template doesn't exist
@@ -463,13 +463,13 @@ Troubleshooting:
         """Get fallback HTML template."""
         base_style = """
         <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }  # noqa: E501
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; }
-            .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; border-radius: 0 0 8px 8px; }
-            .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .info-box { background: #f1f5f9; padding: 15px; border-radius: 6px; margin: 15px 0; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }  # noqa: E501
+            .content { background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; }  # noqa: E501
+            .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; border-radius: 0 0 8px 8px; }  # noqa: E501
+            .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }  # noqa: E501
+            .info-box { background: #f1f5f9; padding: 15px; border-radius: 6px; margin: 15px 0; }  # noqa: E501
             .success { border-left: 4px solid #16a34a; }
             .error { border-left: 4px solid #dc2626; }
             .warning { border-left: 4px solid #ea580c; }
@@ -499,7 +499,7 @@ Troubleshooting:
                     <div class="info-box {status_class}">
                         {self._get_fallback_content(template_name, context)}
                     </div>
-                    <a href="{context.get('backup_url', context.get('restore_url', '#'))}" class="button">
+                    <a href="{context.get('backup_url', context.get('restore_url', '#'))}" class="button">  # noqa: E501
                         View Details
                     </a>
                 </div>
@@ -548,7 +548,7 @@ Troubleshooting:
                 <h2>Restore Completed Successfully</h2>
                 <p><strong>Restore ID:</strong> {context.get('restore_id')}</p>
                 <p><strong>Backup ID:</strong> {context.get('backup_id')}</p>
-                <p><strong>Entries Restored:</strong> {context.get('entries_restored')}</p>
+                <p><strong>Entries Restored:</strong> {context.get('entries_restored')}</p>  # noqa: E501
                 <p><strong>Duration:</strong> {context.get('duration')}</p>
             """
         elif "restore_started" in template_name:

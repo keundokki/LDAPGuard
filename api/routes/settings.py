@@ -86,7 +86,8 @@ async def test_email_configuration(
 
         # Resolve test recipient
         raw_recipients = email_config.to_email or email_config.from_email
-        recipients = [value.strip() for value in raw_recipients.split(",") if value.strip()]
+        recipients = [value.strip()
+                      for value in raw_recipients.split(",") if value.strip()]
         if not recipients:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -100,7 +101,7 @@ async def test_email_configuration(
         msg["Subject"] = "[LDAPGuard] SMTP Configuration Test"
 
         body = (
-            "This is a test email from LDAPGuard to verify SMTP configuration is working correctly."
+            "This is a test email from LDAPGuard to verify SMTP configuration is working correctly."  # noqa: E501
         )
         msg.attach(MIMEText(body, "plain"))
 
@@ -145,7 +146,7 @@ async def test_s3_configuration(
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="boto3 library is not installed. Please install it with: pip install boto3",
+            detail="boto3 library is not installed. Please install it with: pip install boto3",  # noqa: E501
         )
 
     try:
@@ -189,7 +190,7 @@ async def test_s3_configuration(
 
         return {
             "status": "success",
-            "message": f"S3 connection successful. Bucket '{s3_config.bucket}' is accessible.",
+            "message": f"S3 connection successful. Bucket '{s3_config.bucket}' is accessible.",  # noqa: E501
             "provider": s3_config.provider,
             "region": s3_config.region,
         }

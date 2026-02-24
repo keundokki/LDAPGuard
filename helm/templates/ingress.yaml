@@ -1,0 +1,42 @@
+{{- if .Values.ingress.enabled }}
+# Ingress for LDAPGuard UI/API (Traefik).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ldapguard.fullname" . }}
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - secretName: {{ tpl .secretName $ | quote }}
+      hosts:
+        {{- range .hosts }}
+        - {{ tpl . $ | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ tpl .host $ | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "ldapguard.fullname" $ }}-{{ .service }}
+                port:
+                  number: {{ index $.Values.service .service "port" }}
+          {{- end }}
+    {{- end }}
+{{- end }}

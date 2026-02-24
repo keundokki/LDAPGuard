@@ -25,7 +25,9 @@ def _enrich_scheduled_backup(schedule: ScheduledBackup) -> dict:
         "id": schedule.id,
         "name": schedule.name,
         "ldap_server_id": schedule.ldap_server_id,
-        "backup_type": schedule.backup_type.value if hasattr(schedule.backup_type, 'value') else schedule.backup_type,
+        "backup_type": schedule.backup_type.value if hasattr(
+            schedule.backup_type,
+            'value') else schedule.backup_type,
         "cron_expression": schedule.cron_expression,
         "retention_days": schedule.retention_days,
         "is_active": schedule.is_active,

@@ -202,17 +202,18 @@ async def get_enabled_features(
     """Get enabled feature flags (e.g., cloud storage)."""
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Try to get S3 enabled setting from database
     result = await db.execute(
         select(SystemSetting).where(SystemSetting.key == "s3_enabled")
     )
     s3_setting = result.scalar_one_or_none()
-    
+
     logger.info(f"S3 setting from DB: {s3_setting}")
     if s3_setting:
-        logger.info(f"S3 setting value: {s3_setting.value}, type: {type(s3_setting.value)}")
-    
+        logger.info(
+            f"S3 setting value: {s3_setting.value}, type: {type(s3_setting.value)}")
+
     # Check if S3 is enabled in database, fall back to environment variable
     s3_enabled = False
     if s3_setting:
@@ -221,7 +222,7 @@ async def get_enabled_features(
     else:
         s3_enabled = settings.S3_ENABLED
         logger.info(f"S3 enabled (from env): {s3_enabled}")
-    
+
     return {
         "cloud_storage_enabled": s3_enabled,
         "cloud_provider": "s3" if s3_enabled else None,

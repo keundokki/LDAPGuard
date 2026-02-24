@@ -1,0 +1,191 @@
+# Default values for LDAPGuard.
+# This file is the single source of truth for Helm runtime configuration.
+
+# Optional overrides for resource naming to keep service DNS predictable.
+fullnameOverride: ldapguard
+
+# Optional image pull secrets for private registries (GHCR can be public or private).
+imagePullSecrets: []
+
+# ServiceAccount settings for workloads.
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Replica counts per workload.
+replicaCount:
+  api: 1
+  web: 1
+  worker: 1
+
+# Container images for each LDAPGuard service.
+images:
+  api:
+    repository: ghcr.io/keundokki/ldapguard-api
+    tag: "1.0.0"
+    pullPolicy: Always
+  web:
+    repository: ghcr.io/keundokki/ldapguard-web
+    tag: "1.0.0"
+    pullPolicy: Always
+  worker:
+    repository: ghcr.io/keundokki/ldapguard-worker
+    tag: "1.0.0"
+    pullPolicy: Always
+
+# Service definitions for routable components.
+service:
+  api:
+    type: ClusterIP
+    port: 8000
+  web:
+    type: ClusterIP
+    port: 80
+
+# Global domain settings (easy to override from ArgoCD UI).
+global:
+  host: ldapguard.example.com
+  tlsSecretName: ldapguard-tls
+
+# Ingress configured for Traefik in on-prem cluster.
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    # Default host derived from global.host (override in ArgoCD).
+    - host: "{{ .Values.global.host }}"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: web
+  tls:
+    - secretName: "{{ .Values.global.tlsSecretName }}"
+      hosts:
+        - "{{ .Values.global.host }}"
+
+# Resource controls per service.
+resources:
+  api:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  web:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  worker:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Non-sensitive and sensitive runtime app configuration.
+ldapguard:
+  appName: LDAPGuard
+  appVersion: "1.0.0"
+  # Generic default derived from ingress host; override if needed.
+  appUrl: "https://{{ .Values.global.host }}"
+  debug: false
+  # By default, allow the same host as ingress.
+  corsAllowedOrigins: "https://{{ .Values.global.host }}"
+
+  # Sensitive values are templated into Secret (see templates/secret.yaml).
+  secretKey: "CHANGE_ME_SECRET_KEY_MIN_32_CHARS"
+  encryptionKey: "CHANGE_ME_ENCRYPTION_KEY_MIN_32_CHARS"
+  databaseUrl: "postgresql+asyncpg://ldapguard:CHANGE_ME_POSTGRES_PASSWORD@ldapguard-postgres:5432/ldapguard"
+  redisUrl: "redis://ldapguard-redis:6379"
+
+  backupDir: "/data/backups"
+  backupRetentionDays: 30
+  backupVerifyOnCompletion: true
+  backupVerifyBeforeRestore: true
+
+# Secret handling: set existingSecretName to use a pre-created Kubernetes Secret.
+secrets:
+  existingSecretName: ""
+
+# Horizontal autoscaling controls.
+autoscaling:
+  enabled: false
+  api:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  web:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+# PostgreSQL stateful dependency deployed in-cluster.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: ldapguard
+    password: CHANGE_ME_POSTGRES_PASSWORD
+    database: ldapguard
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    accessModes: ["ReadWriteOnce"]
+    size: 20Gi
+    storageClassName: nfs-client
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Redis stateful dependency deployed in-cluster.
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  persistence:
+    enabled: true
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi
+    storageClassName: nfs-client
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Backup PVC for backup artifact retention.
+backup:
+  enabled: true
+  mountPath: /data/backups
+  persistence:
+    accessModes: ["ReadWriteOnce"]
+    size: 50Gi
+    storageClassName: nfs-client
+
+# Optional scheduling constraints.
+nodeSelector: {}
+tolerations: []
+affinity: {}

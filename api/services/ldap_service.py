@@ -390,7 +390,7 @@ class LDAPService:
 
     def backup_acls(self, output_path: str) -> int:
         """Backup access control lists (ACLs).
-        
+
         Includes:
         - OpenLDAP: openLDAPaci attributes from all entries + olcAccess from cn=config
         - Active Directory: nTSecurityDescriptor attribute
@@ -414,9 +414,9 @@ class LDAPService:
             # If search fails, try to get all entries and filter
             all_entries = self.search_all_entries()
             acl_entries = [
-                (dn, {k: v for k, v in attrs.items() if k.lower() in [a.lower() for a in acl_attributes]})
+                (dn, {k: v for k, v in attrs.items() if k.lower() in [a.lower() for a in acl_attributes]})  # noqa: E501
                 for dn, attrs in all_entries
-                if any(k.lower() in [a.lower() for a in acl_attributes] for k in attrs.keys())
+                if any(k.lower() in [a.lower() for a in acl_attributes] for k in attrs.keys())  # noqa: E501
             ]
 
         # Also try to backup OpenLDAP's cn=config ACLs (olcAccess rules)

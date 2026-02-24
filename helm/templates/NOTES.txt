@@ -1,0 +1,18 @@
+LDAPGuard has been deployed.
+
+1. Web UI URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+  Use kubectl port-forward to access the service:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ldapguard.fullname" . }}-web 8080:{{ .Values.service.web.port }}
+{{- end }}
+
+2. API URL:
+  https://{{ (index .Values.ingress.hosts 0).host }} (API behind /)
+
+3. Check pod status:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+4. Verify services:
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "ldapguard.fullname" . }}-api {{ include "ldapguard.fullname" . }}-web

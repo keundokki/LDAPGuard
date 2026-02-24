@@ -1,0 +1,20 @@
+{{- if .Values.redis.enabled }}
+# ClusterIP service for Redis.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-redis
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: redis
+      protocol: TCP
+  selector:
+    {{- include "ldapguard.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+{{- end }}

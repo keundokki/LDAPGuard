@@ -6,7 +6,7 @@ from sqlalchemy import select
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.encryption import decrypt_ldap_password
-from api.models.models import Backup, BackupCategory, BackupStatus, BackupType, LDAPServer, SystemSetting
+from api.models.models import Backup, BackupCategory, BackupStatus, BackupType, LDAPServer, SystemSetting  # noqa: E501
 from api.services.backup_service import BackupService
 from api.services.email_service import EmailService
 from api.services.ldap_service import LDAPService
@@ -24,10 +24,10 @@ async def get_notification_recipients(db):
         select(SystemSetting).where(SystemSetting.key == "notification_email")
     )
     setting = result.scalar_one_or_none()
-    
+
     if not setting or not setting.value:
         return []
-    
+
     # Parse comma-separated email list
     recipients = [email.strip() for email in setting.value.split(",") if email.strip()]
     return recipients
@@ -47,22 +47,22 @@ def parse_bool_setting(value) -> bool:
 
 def calculate_retry_delay(retry_count: int) -> int:
     """Calculate retry delay with exponential backoff.
-    
+
     Args:
         retry_count: Current retry attempt number (0-based)
-        
+
     Returns:
         Delay in seconds before next retry
     """
     base_delay = settings.BACKUP_RETRY_DELAY
     backoff = settings.BACKUP_RETRY_BACKOFF
-    
+
     # Exponential backoff: delay * (backoff ^ retry_count)
     # Example: 300s * (2.0 ^ 0) = 300s (5 min)
     #          300s * (2.0 ^ 1) = 600s (10 min)
     #          300s * (2.0 ^ 2) = 1200s (20 min)
     delay = int(base_delay * (backoff ** retry_count))
-    
+
     # Cap at 1 hour maximum
     max_delay = 3600
     return min(delay, max_delay)
@@ -70,20 +70,20 @@ def calculate_retry_delay(retry_count: int) -> int:
 
 async def should_retry_backup(backup: Backup) -> bool:
     """Determine if a failed backup should be retried.
-    
+
     Args:
         backup: Backup instance that failed
-        
+
     Returns:
         True if backup should be retried, False otherwise
     """
     if not settings.BACKUP_RETRY_ENABLED:
         return False
-        
+
     if backup.retry_count >= backup.max_retries:
         logger.info(f"Backup {backup.id} exceeded max retries ({backup.max_retries})")
         return False
-        
+
     # Don't retry certain types of errors that won't benefit from retry
     non_retryable_errors = [
         "not found",
@@ -91,7 +91,7 @@ async def should_retry_backup(backup: Backup) -> bool:
         "permission denied",
         "authentication failed",
     ]
-    
+
     if backup.error_message:
         error_lower = backup.error_message.lower()
         for non_retryable in non_retryable_errors:
@@ -100,22 +100,22 @@ async def should_retry_backup(backup: Backup) -> bool:
                     f"Backup {backup.id} has non-retryable error: {non_retryable}"
                 )
                 return False
-    
+
     return True
 
 
 async def schedule_backup_retry(backup_id: int, retry_delay: int):
     """Schedule a backup retry.
-    
+
     Args:
         backup_id: ID of backup to retry
         retry_delay: Delay in seconds before retry
     """
     # Import here to avoid circular dependency
     from workers.main import scheduler
-    
+
     retry_time = datetime.utcnow() + timedelta(seconds=retry_delay)
-    
+
     # Schedule retry using APScheduler
     scheduler.add_job(
         perform_backup,
@@ -125,7 +125,7 @@ async def schedule_backup_retry(backup_id: int, retry_delay: int):
         id=f"retry_backup_{backup_id}_{datetime.utcnow().timestamp()}",
         replace_existing=False,
     )
-    
+
     logger.info(
         f"Scheduled retry for backup {backup_id} at {retry_time} "
         f"({retry_delay} seconds from now)"
@@ -168,7 +168,7 @@ async def perform_backup(backup_id: int):
         )
 
         logger.info(
-            "Notification settings loaded: recipients=%s webhook_url=%s smtp_host=%s notify_success=%s notify_failure=%s",
+            "Notification settings loaded: recipients=%s webhook_url=%s smtp_host=%s notify_success=%s notify_failure=%s",  # noqa: E501
             len(recipients),
             settings_map.get("notification_webhook_url"),
             settings_map.get("smtp_server"),
@@ -206,7 +206,7 @@ async def perform_backup(backup_id: int):
             await webhook_service.send_backup_started(backup_id, ldap_server.name)
 
             # Send email notification
-            await email_service.send_backup_started(backup_id, ldap_server.name, recipients)
+            await email_service.send_backup_started(backup_id, ldap_server.name, recipients)  # noqa: E501
 
             # Record metrics
             MetricsService.record_backup_started(backup.backup_type.value)
@@ -241,7 +241,7 @@ async def perform_backup(backup_id: int):
                 entry_count = ldap_service.backup_acls(file_path)
             elif backup.category == BackupCategory.CERTIFICATES:
                 entry_count = ldap_service.backup_certificates(file_path)
-            elif backup.backup_type == BackupType.INCREMENTAL and backup.parent_backup_id:
+            elif backup.backup_type == BackupType.INCREMENTAL and backup.parent_backup_id:  # noqa: E501
                 # Get parent backup timestamp for incremental filtering
                 result = await db.execute(
                     select(Backup).where(Backup.id == backup.parent_backup_id)
@@ -251,12 +251,13 @@ async def perform_backup(backup_id: int):
                 if parent_backup and parent_backup.completed_at:
                     # Convert parent backup timestamp to LDAP format (YYYYMMDDHHMMSSZ)
                     # e.g., 20260212175000Z for 2026-02-12 17:50:00 UTC
-                    ldap_timestamp = parent_backup.completed_at.strftime("%Y%m%d%H%M%SZ")
+                    ldap_timestamp = parent_backup.completed_at.strftime(
+                        "%Y%m%d%H%M%SZ")
                     # Search filter: entries modified since parent backup completion
                     # (&(objectClass=*)(modifyTimestamp>=20260212175000Z))
-                    search_filter = f"(&(objectClass=*)(modifyTimestamp>={ldap_timestamp}))"
+                    search_filter = f"(&(objectClass=*)(modifyTimestamp>={ldap_timestamp}))"  # noqa: E501
                     logger.info(
-                        f"Incremental backup for {backup.id}: using timestamp filter {ldap_timestamp}"
+                        f"Incremental backup for {backup.id}: using timestamp filter {ldap_timestamp}"  # noqa: E501
                     )
                     entry_count = ldap_service.backup_to_ldif(
                         file_path, search_filter=search_filter
@@ -264,7 +265,7 @@ async def perform_backup(backup_id: int):
                 else:
                     # Fallback to full backup if parent timestamp not available
                     logger.warning(
-                        f"Incremental backup {backup.id}: parent backup missing/incomplete, falling back to full backup"
+                        f"Incremental backup {backup.id}: parent backup missing/incomplete, falling back to full backup"  # noqa: E501
                     )
                     entry_count = ldap_service.backup_to_ldif(file_path)
             else:
@@ -292,15 +293,11 @@ async def perform_backup(backup_id: int):
                     )
                     backup.checksum = checksum
                     backup.checksum_algorithm = settings.BACKUP_CHECKSUM_ALGORITHM
-                    
+
                     # Perform comprehensive verification
-                    is_valid, verification_msg = verification_service.comprehensive_verification(
-                        file_path,
-                        expected_checksum=checksum,
-                        expected_size=file_size,
-                        validate_syntax=True
-                    )
-                    
+                    is_valid, verification_msg = verification_service.comprehensive_verification(  # noqa: E501
+                        file_path, expected_checksum=checksum, expected_size=file_size, validate_syntax=True)  # noqa: E501
+
                     if is_valid:
                         backup.verification_status = "verified"
                         backup.verified_at = datetime.utcnow()
@@ -308,9 +305,9 @@ async def perform_backup(backup_id: int):
                     else:
                         backup.verification_status = "failed"
                         logger.warning(
-                            f"Backup {backup_id} verification failed: {verification_msg}"
+                            f"Backup {backup_id} verification failed: {verification_msg}"  # noqa: E501
                         )
-                        
+
                 except Exception as e:
                     logger.error(f"Backup {backup_id} verification error: {str(e)}")
                     backup.verification_status = "failed"
@@ -325,7 +322,8 @@ async def perform_backup(backup_id: int):
                     backup.checksum_algorithm = settings.BACKUP_CHECKSUM_ALGORITHM
                     backup.verification_status = "not_verified"
                 except Exception as e:
-                    logger.error(f"Failed to calculate checksum for backup {backup_id}: {str(e)}")
+                    logger.error(
+                        f"Failed to calculate checksum for backup {backup_id}: {str(e)}")  # noqa: E501
 
             # Update backup record
             backup.status = BackupStatus.COMPLETED
@@ -334,18 +332,18 @@ async def perform_backup(backup_id: int):
             backup.entry_count = entry_count
             backup.completed_at = datetime.utcnow()
             await db.commit()
-            
+
             # Upload to cloud storage if enabled
             if settings.S3_ENABLED and settings.S3_AUTO_UPLOAD:
                 try:
                     logger.info(f"Uploading backup {backup_id} to cloud storage")
-                    
+
                     # Generate S3 object key (path in bucket)
                     # Format: backups/YYYY/MM/DD/server_name/backup_id_filename.ldif.gz
                     from pathlib import Path
                     now = datetime.utcnow()
-                    object_key = f"backups/{now.year}/{now.month:02d}/{now.day:02d}/{ldap_server.name}/backup_{backup_id}_{Path(file_path).name}"
-                    
+                    object_key = f"backups/{now.year}/{now.month:02d}/{now.day:02d}/{ldap_server.name}/backup_{backup_id}_{Path(file_path).name}"  # noqa: E501
+
                     # Prepare metadata
                     metadata = {
                         'backup-id': str(backup_id),
@@ -356,7 +354,7 @@ async def perform_backup(backup_id: int):
                         'checksum': backup.checksum or '',
                         'checksum-algorithm': backup.checksum_algorithm or ''
                     }
-                    
+
                     # Upload to S3
                     upload_result = await storage_service.upload_backup(
                         file_path=file_path,
@@ -364,7 +362,7 @@ async def perform_backup(backup_id: int):
                         metadata=metadata,
                         storage_class=settings.S3_STORAGE_CLASS
                     )
-                    
+
                     # Update backup record with cloud storage info
                     backup.cloud_uploaded = True
                     backup.cloud_storage_path = object_key
@@ -372,14 +370,14 @@ async def perform_backup(backup_id: int):
                     backup.cloud_provider = upload_result.get('provider', 'unknown')
                     backup.cloud_storage_class = settings.S3_STORAGE_CLASS
                     await db.commit()
-                    
+
                     logger.info(
-                        f"Successfully uploaded backup {backup_id} to {upload_result['provider']} "
-                        f"storage at {object_key}"
-                    )
-                    
-                    # Delete local file if auto-delete is enabled and we're keeping enough local backups
-                    if settings.S3_AUTO_DELETE_LOCAL and settings.S3_KEEP_LAST_LOCAL > 0:
+                        f"Successfully uploaded backup {backup_id} to {upload_result['provider']} "  # noqa: E501
+                        f"storage at {object_key}")
+
+                    # Delete local file if auto-delete is enabled and we're keeping
+                    # enough local backups
+                    if settings.S3_AUTO_DELETE_LOCAL and settings.S3_KEEP_LAST_LOCAL > 0:  # noqa: E501
                         # Count local backups for this server
                         result = await db.execute(
                             select(Backup)
@@ -391,7 +389,7 @@ async def perform_backup(backup_id: int):
                             .order_by(Backup.created_at.desc())
                         )
                         local_backups = result.scalars().all()
-                        
+
                         # Only delete if we have more than the minimum to keep
                         if len(local_backups) > settings.S3_KEEP_LAST_LOCAL:
                             # Delete this backup's local file (it's uploaded to cloud)
@@ -399,15 +397,18 @@ async def perform_backup(backup_id: int):
                             try:
                                 if os.path.exists(file_path):
                                     os.remove(file_path)
-                                    logger.info(f"Deleted local backup file: {file_path}")
+                                    logger.info(
+                                        f"Deleted local backup file: {file_path}")
                                     # Clear file_path but keep record
                                     backup.file_path = None
                                     await db.commit()
                             except Exception as del_error:
-                                logger.warning(f"Failed to delete local backup file {file_path}: {del_error}")
-                    
+                                logger.warning(
+                                    f"Failed to delete local backup file {file_path}: {del_error}")  # noqa: E501
+
                 except Exception as s3_error:
-                    logger.error(f"Failed to upload backup {backup_id} to cloud storage: {s3_error}")
+                    logger.error(
+                        f"Failed to upload backup {backup_id} to cloud storage: {s3_error}")  # noqa: E501
                     # Don't fail the backup if cloud upload fails
                     # The backup is still successful locally
 
@@ -450,33 +451,32 @@ async def perform_backup(backup_id: int):
             backup.status = BackupStatus.FAILED
             backup.error_message = str(e)
             backup.completed_at = datetime.utcnow()
-            
+
             # Check if we should retry this backup
             will_retry = await should_retry_backup(backup)
-            
+
             if will_retry:
                 # Increment retry count
                 backup.retry_count += 1
-                
+
                 # Calculate retry delay with exponential backoff
                 retry_delay = calculate_retry_delay(backup.retry_count - 1)
-                
+
                 # Set next retry timestamp
-                backup.next_retry_at = datetime.utcnow() + timedelta(seconds=retry_delay)
-                
+                backup.next_retry_at = datetime.utcnow() + timedelta(seconds=retry_delay)  # noqa: E501
+
                 # Update status to show it will be retried
                 backup.status = BackupStatus.PENDING  # Reset to pending for retry
-                
+
                 await db.commit()
-                
+
                 logger.info(
-                    f"Backup {backup_id} will be retried (attempt {backup.retry_count}/{backup.max_retries}) "
-                    f"in {retry_delay} seconds"
-                )
-                
+                    f"Backup {backup_id} will be retried (attempt {backup.retry_count}/{backup.max_retries}) "  # noqa: E501
+                    f"in {retry_delay} seconds")
+
                 # Schedule the retry
                 await schedule_backup_retry(backup_id, retry_delay)
-                
+
                 # Send email notification about retry
                 if notify_backup_failure:
                     await email_service.send_backup_failed(
@@ -492,12 +492,12 @@ async def perform_backup(backup_id: int):
             else:
                 # No retry - permanent failure
                 await db.commit()
-                
+
                 # Send webhook notification
                 await webhook_service.send_backup_failed(
                     backup_id, ldap_server.name, str(e)
                 )
-                
+
                 # Send email notification (no retry)
                 if notify_backup_failure:
                     await email_service.send_backup_failed(

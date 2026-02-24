@@ -1,0 +1,16 @@
+{{- if .Values.backup.enabled }}
+# PersistentVolumeClaim for backup storage.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-backup
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.backup.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.backup.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.persistence.size }}
+{{- end }}

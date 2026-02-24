@@ -308,7 +308,6 @@ class ConfigurationImport(BaseModel):
 # Cloud storage schemas
 class CloudStorageUploadRequest(BaseModel):
     """Request model for cloud storage upload (currently no parameters needed)."""
-    pass
 
 
 class CloudStorageUploadResponse(BaseModel):

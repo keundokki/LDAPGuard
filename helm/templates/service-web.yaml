@@ -1,0 +1,18 @@
+# ClusterIP service for Web UI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-web
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  type: {{ .Values.service.web.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.web.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "ldapguard.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web

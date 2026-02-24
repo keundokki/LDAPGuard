@@ -17,10 +17,10 @@ from api.models.models import User
 
 class SimplePasswordHasher:
     """Simple PBKDF2-based password hasher using only standard library."""
-    
+
     def __init__(self, iterations: int = 260000):
         self.iterations = iterations
-    
+
     def hash(self, password: str) -> str:
         """Hash a password using PBKDF2-HMAC-SHA256."""
         salt = secrets.token_bytes(32)
@@ -32,7 +32,7 @@ class SimplePasswordHasher:
         )
         # Format: pbkdf2:iterations:salt_hex:hash_hex
         return f"pbkdf2:{self.iterations}:{salt.hex()}:{pwd_hash.hex()}"
-    
+
     def verify(self, password: str, hashed: str) -> bool:
         """Verify a password against its hash."""
         try:
@@ -40,11 +40,11 @@ class SimplePasswordHasher:
             parts = hashed.split(':')
             if len(parts) != 4 or parts[0] != 'pbkdf2':
                 return False
-            
+
             iterations = int(parts[1])
             salt = bytes.fromhex(parts[2])
             stored_hash = parts[3]
-            
+
             # Compute hash of provided password
             pwd_hash = hashlib.pbkdf2_hmac(
                 'sha256',
@@ -52,7 +52,7 @@ class SimplePasswordHasher:
                 salt,
                 iterations
             )
-            
+
             # Constant-time comparison
             return hmac.compare_digest(pwd_hash.hex(), stored_hash)
         except (ValueError, IndexError):

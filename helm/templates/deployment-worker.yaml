@@ -1,0 +1,74 @@
+# Worker deployment (APScheduler/background jobs).
+# Replicas are intentionally fixed at 1 to avoid duplicate scheduled task execution.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-worker
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ldapguard.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "ldapguard.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: {{ include "ldapguard.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.backup.enabled }}
+      initContainers:
+        - name: backup-pvc-check
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >-
+              test -d {{ .Values.backup.mountPath }} &&
+              test -w {{ .Values.backup.mountPath }}
+          volumeMounts:
+            - name: backup-storage
+              mountPath: {{ .Values.backup.mountPath }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.images.worker.repository }}:{{ .Values.images.worker.tag }}"
+          imagePullPolicy: {{ .Values.images.worker.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "ldapguard.fullname" . }}-config
+            - secretRef:
+                name: {{ include "ldapguard.secretName" . }}
+          {{- if .Values.backup.enabled }}
+          volumeMounts:
+            - name: backup-storage
+              mountPath: {{ .Values.backup.mountPath }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources.worker | nindent 12 }}
+      {{- if .Values.backup.enabled }}
+      volumes:
+        - name: backup-storage
+          persistentVolumeClaim:
+            claimName: {{ include "ldapguard.fullname" . }}-backup
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

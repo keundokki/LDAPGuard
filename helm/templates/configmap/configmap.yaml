@@ -1,0 +1,31 @@
+# ConfigMap for non-sensitive LDAPGuard runtime configuration.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-config
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+data:
+  # Application metadata and runtime flags.
+  APP_NAME: {{ .Values.ldapguard.appName | quote }}
+  APP_VERSION: {{ .Values.ldapguard.appVersion | quote }}
+  APP_URL: {{ tpl .Values.ldapguard.appUrl . | quote }}
+  DEBUG: {{ .Values.ldapguard.debug | quote }}
+  CORS_ALLOWED_ORIGINS: {{ .Values.ldapguard.corsAllowedOrigins | quote }}
+
+  # Backing services (non-sensitive connection endpoints).
+  POSTGRES_HOST: {{ printf "%s-postgres" (include "ldapguard.fullname" .) | quote }}
+  POSTGRES_PORT: {{ .Values.postgres.service.port | quote }}
+  POSTGRES_DB: {{ .Values.postgres.auth.database | quote }}
+  POSTGRES_USER: {{ .Values.postgres.auth.username | quote }}
+  REDIS_HOST: {{ printf "%s-redis" (include "ldapguard.fullname" .) | quote }}
+  REDIS_PORT: {{ .Values.redis.service.port | quote }}
+
+  # App behavior tuning.
+  BACKUP_DIR: {{ .Values.ldapguard.backupDir | quote }}
+  BACKUP_RETENTION_DAYS: {{ .Values.ldapguard.backupRetentionDays | quote }}
+  BACKUP_VERIFY_ON_COMPLETION: {{ .Values.ldapguard.backupVerifyOnCompletion | quote }}
+  BACKUP_VERIFY_BEFORE_RESTORE: {{ .Values.ldapguard.backupVerifyBeforeRestore | quote }}
+
+  # Non-sensitive URL for Redis can be configured here if desired.
+  REDIS_URL: {{ .Values.ldapguard.redisUrl | quote }}

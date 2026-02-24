@@ -1,0 +1,20 @@
+{{- if .Values.postgres.enabled }}
+# ClusterIP service for PostgreSQL.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ldapguard.fullname" . }}-postgres
+  labels:
+    {{- include "ldapguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    {{- include "ldapguard.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+{{- end }}

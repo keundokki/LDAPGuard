@@ -49,18 +49,18 @@ class Settings(BaseSettings):
     BACKUP_DIR: str = "/app/backups"
     BACKUP_RETENTION_DAYS: int = 30
     INCREMENTAL_BACKUP_ENABLED: bool = True
-    
+
     # Backup Retry Logic
     BACKUP_MAX_RETRIES: int = 3
     BACKUP_RETRY_DELAY: int = 300  # Initial retry delay in seconds (5 minutes)
     BACKUP_RETRY_BACKOFF: float = 2.0  # Exponential backoff multiplier
     BACKUP_RETRY_ENABLED: bool = True
-    
+
     # Backup Verification
     BACKUP_VERIFY_ON_COMPLETION: bool = True  # Verify immediately after backup
     BACKUP_VERIFY_BEFORE_RESTORE: bool = True  # Verify before restore
     BACKUP_CHECKSUM_ALGORITHM: str = "sha256"  # sha256, sha512, md5
-    
+
     # S3 Cloud Storage
     S3_ENABLED: bool = False
     S3_BUCKET_NAME: Optional[str] = None
@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     S3_STORAGE_CLASS: str = "STANDARD"  # STANDARD, GLACIER, INTELLIGENT_TIERING, etc.
     S3_AUTO_UPLOAD: bool = True  # Automatically upload backups after creation
     S3_AUTO_DELETE_LOCAL: bool = False  # Delete local backup after successful upload
-    S3_KEEP_LAST_LOCAL: int = 3  # Keep last N local backups even if S3_AUTO_DELETE_LOCAL=true
+    S3_KEEP_LAST_LOCAL: int = 3  # Keep last N local backups even if S3_AUTO_DELETE_LOCAL=true  # noqa: E501
 
     # CORS
     CORS_ALLOWED_ORIGINS: Optional[str] = None
