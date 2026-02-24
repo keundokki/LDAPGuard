@@ -1,10 +1,10 @@
-# Validator pipeline for PRs and develop pushes.
+# Validator pipeline for PRs (main/develop/release/*) and develop pushes.
 # This mirrors the Jenkins validator: Trivy scans, container build, tests, SonarCloud, quality gate.
 name: Validator
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, 'release/**']
   push:
     branches: [develop]
 
