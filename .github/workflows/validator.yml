@@ -134,8 +134,11 @@ jobs:
             -Dsonar.projectKey=keundokki_LDAPGuard
 
       # Enforce SonarCloud quality gate with a 20 minute timeout.
+      # SonarCloud uses the same report-task.txt format as SonarQube.
       - name: SonarCloud Quality Gate
-        uses: SonarSource/sonarcloud-quality-gate-action@v1.1.0
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.0
+        with:
+          scanMetadataReportFile: .scannerwork/report-task.txt
         timeout-minutes: 20
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
