@@ -67,7 +67,7 @@ jobs:
       # On develop, bump to next dev version incrementally (e.g., 1.0.1-dev -> 1.0.2-dev).
       # Skip if this is a sync from main (commit message contains "ci: sync develop").
       - name: Bump dev version on develop
-        if: "github.ref == 'refs/heads/develop' && !contains(github.event.head_commit.message, 'ci: sync develop')"
+        if: "${{ github.ref == 'refs/heads/develop' && !contains(github.event.head_commit.message || '', 'ci: sync develop') }}"
         run: |
           current="${{ steps.current_version.outputs.current }}"
           next_dev=$(scripts/next-dev-version.sh "${current}")
@@ -87,7 +87,7 @@ jobs:
 
       # Commit and push updated version files for release.
       - name: Commit release version
-        if: ${{ steps.release.outputs.release_version != '' }}
+        if: ${{ steps.release.outputs.release_version != '' && github.ref != 'refs/heads/main' }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
@@ -232,10 +232,18 @@ jobs:
           git tag -a "ldapguard-v${{ steps.release.outputs.release_version }}" -m "Release ${{ steps.release.outputs.release_version }}"
           git push origin "ldapguard-v${{ steps.release.outputs.release_version }}"
 
-      # Bump to the next dev version after release and push changes.
-      - name: Prepare next dev version
+      # Sync develop with main after release, then bump develop to next -dev.
+      - name: Sync and bump develop after release
         if: ${{ steps.release.outputs.release_version != '' }}
         run: |
+          # Discard local file changes from release bump before switching branches.
+          git reset --hard HEAD
+          git clean -fd
+
+          git fetch origin develop
+          git checkout develop
+          git merge main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
+
           next_dev=$(scripts/next-dev-version.sh "${{ steps.release.outputs.release_version }}")
           scripts/bump-version.sh "${next_dev}"
 
@@ -243,15 +251,6 @@ jobs:
           git config user.email "github-actions@github.com"
           git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
           git commit -m "ci(helm): prepare next dev version ${next_dev}" || true
-          git push
-
-      # Sync develop with main after release to keep branches aligned.
-      - name: Sync develop with main
-        if: ${{ steps.release.outputs.release_version != '' }}
-        run: |
-          git fetch origin develop
-          git checkout develop
-          git merge main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
           git push origin develop
           git checkout main
 
