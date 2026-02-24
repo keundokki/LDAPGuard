@@ -158,6 +158,7 @@ jobs:
 
       # Run SonarCloud analysis for quality checks.
       - name: SonarCloud analysis
+        if: github.ref == 'refs/heads/main'
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -169,6 +170,7 @@ jobs:
       # Enforce SonarCloud quality gate before pushing artifacts.
       # SonarCloud uses the same report-task.txt format as SonarQube.
       - name: SonarCloud Quality Gate
+        if: github.ref == 'refs/heads/main'
         uses: SonarSource/sonarqube-quality-gate-action@v1.2.0
         with:
           scanMetadataReportFile: .scannerwork/report-task.txt
