@@ -41,7 +41,10 @@ jobs:
           current=$(cat VERSION)
           echo "current=${current}" >> "$GITHUB_OUTPUT"
 
-      # Decide release version if is_release is requested.
+      # Determine if this is a release and what version.
+      # - On main: auto-release by stripping -dev
+      # - On workflow_dispatch with is_release: use provided version or strip -dev
+      # - On develop: no release, just dev version bump
       - name: Determine release version
         id: release
         run: |
@@ -49,7 +52,8 @@ jobs:
           release_input="${{ github.event.inputs.release_version }}"
           current="${{ steps.current_version.outputs.current }}"
 
-          if [[ "${is_release}" == "true" ]]; then
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${is_release}" == "true" ]]; then
+            # Auto-release on main or explicit release request
             if [[ -n "${release_input}" ]]; then
               release_version="${release_input}"
             else
@@ -60,20 +64,34 @@ jobs:
             echo "release_version=" >> "$GITHUB_OUTPUT"
           fi
 
-      # Update versioned files on release.
+      # On develop, bump to next dev version incrementally (e.g., 1.0.1-dev -> 1.0.2-dev).
+      - name: Bump dev version on develop
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          current="${{ steps.current_version.outputs.current }}"
+          next_dev=$(scripts/next-dev-version.sh "${current}")
+          scripts/bump-version.sh "${next_dev}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
+          git commit -m "ci(helm): bump dev version to ${next_dev}" || true
+          git push
+
+      # Update versioned files on release (main auto-release or workflow_dispatch).
       - name: Bump versions for release
         if: ${{ steps.release.outputs.release_version != '' }}
         run: |
           scripts/bump-version.sh "${{ steps.release.outputs.release_version }}"
 
       # Commit and push updated version files for release.
-      - name: Commit version bump
+      - name: Commit release version
         if: ${{ steps.release.outputs.release_version != '' }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
-          git commit -m "ci(helm): update deployment files with version ${{ steps.release.outputs.release_version }}" || true
+          git commit -m "ci(helm): release version ${{ steps.release.outputs.release_version }}" || true
           git push
 
       # Install Trivy CLI for security scans.
@@ -223,8 +241,18 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
-          git commit -m "ci(helm): update deployment files with version ${next_dev}" || true
+          git commit -m "ci(helm): prepare next dev version ${next_dev}" || true
           git push
+
+      # Sync develop with main after release to keep branches aligned.
+      - name: Sync develop with main
+        if: ${{ steps.release.outputs.release_version != '' }}
+        run: |
+          git fetch origin develop:develop
+          git checkout develop
+          git merge --ff-only main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
+          git push origin develop
+          git checkout main
 
       # Always clean up local images to keep the runner lean.
       - name: Cleanup Docker images
