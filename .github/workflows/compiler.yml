@@ -1,21 +1,17 @@
-# Compiler pipeline for build and release.
-# Mirrors Jenkins compiler: version bumping, Trivy scan, tests, SonarCloud, image push, and tagging.
 name: Compiler
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
+      - release/**
   workflow_dispatch:
     inputs:
-      is_release:
-        description: "Set to true to create a release"
-        required: false
-        default: "false"
       release_version:
-        description: "Optional release version (e.g. 1.2.3)"
+        description: "Optional release version override (e.g. 1.2.3) for manual run"
         required: false
 
-# Prevent overlapping compiler runs on the same branch.
 concurrency:
   group: compiler-${{ github.ref }}
   cancel-in-progress: true
@@ -28,91 +24,58 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Checkout full history to allow tags and pushes.
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Read current version from VERSION file.
       - name: Read current version
         id: current_version
         run: |
           current=$(cat VERSION)
           echo "current=${current}" >> "$GITHUB_OUTPUT"
 
-      # Determine if this is a release and what version.
-      # - On main: auto-release by stripping -dev
-      # - On workflow_dispatch with is_release: use provided version or strip -dev
-      # - On develop: no release, just dev version bump
-      - name: Determine release version
-        id: release
+      - name: Resolve publish version
+        id: publish
         run: |
-          is_release="${{ github.event.inputs.is_release || 'false' }}"
-          release_input="${{ github.event.inputs.release_version }}"
           current="${{ steps.current_version.outputs.current }}"
+          manual_release="${{ github.event.inputs.release_version }}"
+          branch="${{ github.ref }}"
 
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${is_release}" == "true" ]]; then
-            # Auto-release on main or explicit release request
-            if [[ -n "${release_input}" ]]; then
-              release_version="${release_input}"
+          if [[ -n "${manual_release}" ]]; then
+            publish_version="${manual_release}"
+          elif [[ "${branch}" == "refs/heads/main" ]]; then
+            # Main publishes final version (strip -dev/-rc suffixes).
+            publish_version=$(echo "${current}" | sed -E 's/-(dev|rc(\.[0-9]+)?)$//')
+          elif [[ "${branch}" == refs/heads/release/* ]]; then
+            # Release branch publishes candidate tag.
+            if [[ "${current}" =~ -rc(\.[0-9]+)?$ ]]; then
+              publish_version="${current}"
             else
-              release_version="${current%-dev}"
+              base=$(echo "${current}" | sed -E 's/-dev$//')
+              publish_version="${base}-rc"
             fi
-            echo "release_version=${release_version}" >> "$GITHUB_OUTPUT"
           else
-            echo "release_version=" >> "$GITHUB_OUTPUT"
+            # Develop uses current version (expected to be *-dev).
+            publish_version="${current}"
           fi
 
-      # On develop, bump to next dev version incrementally (e.g., 1.0.1-dev -> 1.0.2-dev).
-      # Skip if this is a sync from main (commit message contains "ci: sync develop").
-      - name: Bump dev version on develop
-        if: "${{ github.ref == 'refs/heads/develop' && !contains(github.event.head_commit.message || '', 'ci: sync develop') }}"
-        run: |
-          current="${{ steps.current_version.outputs.current }}"
-          next_dev=$(scripts/next-dev-version.sh "${current}")
-          scripts/bump-version.sh "${next_dev}"
+          echo "publish_version=${publish_version}" >> "$GITHUB_OUTPUT"
 
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
-          git commit -m "ci(helm): bump dev version to ${next_dev}" || true
-          git push
-
-      # Update versioned files on release (main auto-release or workflow_dispatch).
-      - name: Bump versions for release
-        if: ${{ steps.release.outputs.release_version != '' }}
-        run: |
-          scripts/bump-version.sh "${{ steps.release.outputs.release_version }}"
-
-      # Commit and push updated version files for release.
-      - name: Commit release version
-        if: ${{ steps.release.outputs.release_version != '' && github.ref != 'refs/heads/main' }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
-          git commit -m "ci(helm): release version ${{ steps.release.outputs.release_version }}" || true
-          git push
-
-      # Install Trivy CLI for security scans.
       - name: Setup Trivy
         uses: aquasecurity/setup-trivy@v0.2.1
 
-      # Configure Python for any build/test tooling.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      # Install Python dependencies used by tests.
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Trivy scan with HIGH+CRITICAL severity for release pipeline.
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -122,11 +85,9 @@ jobs:
           exit-code: "1"
           trivyignores: .trivyignore
 
-      # Enable Buildx for caching and reproducible builds.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build API image with the resolved version tag.
       - name: Build API image
         uses: docker/build-push-action@v6
         with:
@@ -134,11 +95,10 @@ jobs:
           file: ./Dockerfile.api
           load: true
           push: false
-          tags: ldapguard-api:${{ steps.release.outputs.release_version || steps.current_version.outputs.current }}
+          tags: ldapguard-api:${{ steps.publish.outputs.publish_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Build Web image with the resolved version tag.
       - name: Build Web image
         uses: docker/build-push-action@v6
         with:
@@ -146,11 +106,10 @@ jobs:
           file: ./Dockerfile.web
           load: true
           push: false
-          tags: ldapguard-web:${{ steps.release.outputs.release_version || steps.current_version.outputs.current }}
+          tags: ldapguard-web:${{ steps.publish.outputs.publish_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Build Worker image with the resolved version tag.
       - name: Build Worker image
         uses: docker/build-push-action@v6
         with:
@@ -158,11 +117,10 @@ jobs:
           file: ./Dockerfile.worker
           load: true
           push: false
-          tags: ldapguard-worker:${{ steps.release.outputs.release_version || steps.current_version.outputs.current }}
+          tags: ldapguard-worker:${{ steps.publish.outputs.publish_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Run pytest inside the API container to match Jenkins behavior.
       - name: Run tests inside API image
         run: |
           docker run --rm \
@@ -172,10 +130,9 @@ jobs:
             -e REDIS_URL=redis://localhost:6379 \
             -e SECRET_KEY=test-secret-key-minimum-32-characters \
             -e ENCRYPTION_KEY=test-encryption-key-32-bytes-minimum \
-            ldapguard-api:${{ steps.release.outputs.release_version || steps.current_version.outputs.current }} \
+            ldapguard-api:${{ steps.publish.outputs.publish_version }} \
             pytest tests
 
-      # Run SonarCloud analysis for quality checks.
       - name: SonarCloud analysis
         if: github.ref == 'refs/heads/main'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -186,8 +143,6 @@ jobs:
             -Dsonar.organization=keundokki
             -Dsonar.projectKey=keundokki_LDAPGuard
 
-      # Enforce SonarCloud quality gate before pushing artifacts.
-      # SonarCloud uses the same report-task.txt format as SonarQube.
       - name: SonarCloud Quality Gate
         if: github.ref == 'refs/heads/main'
         uses: SonarSource/sonarqube-quality-gate-action@v1.2.0
@@ -197,7 +152,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # Authenticate to GHCR to push images.
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -205,60 +159,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tag and push images with version and latest tags.
       - name: Push images
         run: |
-          version="${{ steps.release.outputs.release_version || steps.current_version.outputs.current }}"
+          version="${{ steps.publish.outputs.publish_version }}"
           docker tag ldapguard-api:${version} ghcr.io/keundokki/ldapguard-api:${version}
           docker tag ldapguard-web:${version} ghcr.io/keundokki/ldapguard-web:${version}
           docker tag ldapguard-worker:${version} ghcr.io/keundokki/ldapguard-worker:${version}
-
-          docker tag ldapguard-api:${version} ghcr.io/keundokki/ldapguard-api:latest
-          docker tag ldapguard-web:${version} ghcr.io/keundokki/ldapguard-web:latest
-          docker tag ldapguard-worker:${version} ghcr.io/keundokki/ldapguard-worker:latest
 
           docker push ghcr.io/keundokki/ldapguard-api:${version}
           docker push ghcr.io/keundokki/ldapguard-web:${version}
           docker push ghcr.io/keundokki/ldapguard-worker:${version}
 
-          docker push ghcr.io/keundokki/ldapguard-api:latest
-          docker push ghcr.io/keundokki/ldapguard-web:latest
-          docker push ghcr.io/keundokki/ldapguard-worker:latest
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker tag ldapguard-api:${version} ghcr.io/keundokki/ldapguard-api:latest
+            docker tag ldapguard-web:${version} ghcr.io/keundokki/ldapguard-web:latest
+            docker tag ldapguard-worker:${version} ghcr.io/keundokki/ldapguard-worker:latest
 
-      # Create and push a git tag for release builds.
+            docker push ghcr.io/keundokki/ldapguard-api:latest
+            docker push ghcr.io/keundokki/ldapguard-web:latest
+            docker push ghcr.io/keundokki/ldapguard-worker:latest
+          fi
+
       - name: Tag release
-        if: ${{ steps.release.outputs.release_version != '' }}
+        if: github.ref == 'refs/heads/main'
         run: |
-          git tag -a "ldapguard-v${{ steps.release.outputs.release_version }}" -m "Release ${{ steps.release.outputs.release_version }}"
-          git push origin "ldapguard-v${{ steps.release.outputs.release_version }}"
+          version="${{ steps.publish.outputs.publish_version }}"
+          git tag -a "ldapguard-v${version}" -m "Release ${version}" || true
+          git push origin "ldapguard-v${version}" || true
 
-      # Sync develop with main after release, then bump develop to next -dev.
-      - name: Sync and bump develop after release
-        if: ${{ steps.release.outputs.release_version != '' }}
-        run: |
-          # Discard local file changes from release bump before switching branches.
-          git reset --hard HEAD
-          git clean -fd
-
-          git fetch origin develop
-          git checkout develop
-          git merge main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
-
-          next_dev=$(scripts/next-dev-version.sh "${{ steps.release.outputs.release_version }}")
-          scripts/bump-version.sh "${next_dev}"
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add VERSION pyproject.toml helm/Chart.yaml helm/values.yaml
-          git commit -m "ci(helm): prepare next dev version ${next_dev}" || true
-          git push origin develop
-          git checkout main
-
-      # Always clean up local images to keep the runner lean.
       - name: Cleanup Docker images
         if: always()
         run: |
-          version="${{ steps.release.outputs.release_version || steps.current_version.outputs.current }}"
+          version="${{ steps.publish.outputs.publish_version }}"
           docker image rm -f \
             ldapguard-api:${version} \
             ldapguard-web:${version} \
