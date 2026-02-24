@@ -65,8 +65,9 @@ jobs:
           fi
 
       # On develop, bump to next dev version incrementally (e.g., 1.0.1-dev -> 1.0.2-dev).
+      # Skip if this is a sync from main (commit message contains "ci: sync develop").
       - name: Bump dev version on develop
-        if: github.ref == 'refs/heads/develop'
+        if: github.ref == 'refs/heads/develop' && !contains(github.event.head_commit.message, 'ci: sync develop')
         run: |
           current="${{ steps.current_version.outputs.current }}"
           next_dev=$(scripts/next-dev-version.sh "${current}")
@@ -248,9 +249,9 @@ jobs:
       - name: Sync develop with main
         if: ${{ steps.release.outputs.release_version != '' }}
         run: |
-          git fetch origin develop:develop
+          git fetch origin develop
           git checkout develop
-          git merge --ff-only main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
+          git merge main -m "ci: sync develop with main after release ${{ steps.release.outputs.release_version }}"
           git push origin develop
           git checkout main
 

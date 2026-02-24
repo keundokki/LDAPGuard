@@ -36,14 +36,14 @@ sed -i.bak -E "s/^appVersion:\s*.*/appVersion: \"${new_version}\"/" helm/Chart.y
 
 # Update Helm image tags for LDAPGuard services only (api/web/worker).
 awk -v ver="${new_version}" '
-  BEGIN {section=""; sub=""}
-  /^[^[:space:]]/ {section=""; sub=""}
+  BEGIN {section=""; component=""}
+  /^[^[:space:]]/ {section=""; component=""}
   /^images:/ {section="images"; print; next}
-  section=="images" && /^  api:/ {sub="api"; print; next}
-  section=="images" && /^  web:/ {sub="web"; print; next}
-  section=="images" && /^  worker:/ {sub="worker"; print; next}
-  section=="images" && /^  [a-zA-Z0-9_-]+:/ {sub=""; print; next}
-  section=="images" && sub!="" && /^    tag:/ {print "    tag: \"" ver "\""; next}
+  section=="images" && /^  api:/ {component="api"; print; next}
+  section=="images" && /^  web:/ {component="web"; print; next}
+  section=="images" && /^  worker:/ {component="worker"; print; next}
+  section=="images" && /^  [a-zA-Z0-9_-]+:/ {component=""; print; next}
+  section=="images" && component!="" && /^    tag:/ {print "    tag: \"" ver "\""; next}
   {print}
 ' helm/values.yaml > helm/values.yaml.tmp
 mv helm/values.yaml.tmp helm/values.yaml
