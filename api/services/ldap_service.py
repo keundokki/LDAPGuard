@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import ldap
 import ldap.ldapobject
@@ -227,44 +227,184 @@ class LDAPService:
 
         return len(json_data)
 
+    # Attributes that commonly cause referential-integrity / constraint
+    # violations when the referenced entry has not been created yet.
+    _DEFERRABLE_ATTRS = frozenset({
+        "manager",
+        "secretary",
+        "member",
+        "uniqueMember",
+        "memberOf",
+        "owner",
+        "seeAlso",
+        "ssoRoles",
+    })
+
+    def _create_missing_entry(self, dn: str, logger) -> bool:
+        """
+        Create a minimal entry for a missing DN.
+        Determines objectClass based on DN structure.
+        For ssoRoles targets, use groupOfNames; for ou=roles and users, adjust accordingly.
+        """
+        try:
+            # Parse DN to determine objectClass
+            parts = dn.split(",")
+            first_rdn = parts[0].lower() if parts else ""
+            
+            # Check if this is an ssoRoles target (usually under ou=roles)
+            # ssoRoles expects groupOfNames objects
+            is_ssoroles_context = any("ou=roles" in p.lower() for p in parts)
+            
+            # Determine appropriate objectClass
+            if first_rdn.startswith("cn="):
+                # It's a group or organizational unit - always use groupOfNames for consistency
+                object_class = "groupOfNames"
+            elif first_rdn.startswith("ou="):
+                # It's an organizational unit
+                # If it's part of a roles structure, it might need to support groupOfNames members
+                if is_ssoroles_context and "ou=roles" in dn.lower():
+                    # This is an intermediate OU in a roles structure
+                    # Create as groupOfNames to allow member attributes
+                    object_class = "groupOfNames"
+                else:
+                    object_class = "organizationalUnit"
+            elif first_rdn.startswith("uid="):
+                # It's a user
+                object_class = "inetOrgPerson"
+            else:
+                # Default to groupOfNames for safety (works for most references)
+                object_class = "groupOfNames"
+            
+            # Build minimal entry attributes
+            entry_attrs: Dict[str, List[str]] = {
+                "objectClass": [object_class]
+            }
+            
+            # Add required attributes based on type
+            if object_class == "groupOfNames":
+                # Groups need at least one member - use root DN as placeholder
+                entry_attrs["member"] = [self.base_dn]
+            elif object_class == "organizationalUnit":
+                # OU doesn't need additional attributes
+                pass
+            elif object_class == "inetOrgPerson":
+                # Users need sn and cn at minimum
+                rdn_value = first_rdn.split("=", 1)[1] if "=" in first_rdn else "unknown"
+                entry_attrs["sn"] = [rdn_value]
+                entry_attrs["cn"] = [rdn_value]
+            
+            # Convert to bytes and create entry
+            bytes_attrs = self._to_bytes_dict(entry_attrs)
+            self.conn.add_s(dn, modlist.addModlist(bytes_attrs))  # type: ignore[union-attr]
+            logger.info("Created missing entry: %s (objectClass: %s)", dn, object_class)
+            return True
+            
+        except Exception as e:
+            logger.warning("Could not create missing entry %s: %s", dn, e)
+            return False
+
+    @staticmethod
+    def _topological_sort(
+        entries: List[Tuple[str, Dict[str, List[str]]]]
+    ) -> List[Tuple[str, Dict[str, List[str]]]]:
+        """
+        Sort entries by dependencies using topological sort.
+        
+        Entries with manager attributes are processed after their managers.
+        This ensures referential integrity constraints are satisfied.
+        """
+        # Build a map of DN -> entry for quick lookup
+        dn_to_entry: Dict[str, Tuple[str, Dict[str, List[str]]]] = {
+            dn: (dn, attrs) for dn, attrs in entries
+        }
+        all_dns: Set[str] = set(dn_to_entry.keys())
+        
+        # Build dependency graph: dn -> list of dns it depends on
+        dependencies: Dict[str, Set[str]] = {}
+        for dn, attrs in entries:
+            dependencies[dn] = set()
+            # Check for manager attribute
+            if "manager" in attrs:
+                for manager_dn in attrs["manager"]:
+                    if manager_dn in all_dns:
+                        dependencies[dn].add(manager_dn)
+            # Check for ssoRoles attribute
+            if "ssoRoles" in attrs:
+                for role_dn in attrs["ssoRoles"]:
+                    if role_dn in all_dns:
+                        dependencies[dn].add(role_dn)
+        
+        # Kahn's algorithm for topological sort
+        in_degree: Dict[str, int] = {dn: 0 for dn in all_dns}
+        for dn, deps in dependencies.items():
+            in_degree[dn] = len(deps)
+        
+        queue: List[str] = [dn for dn in all_dns if in_degree[dn] == 0]
+        sorted_dns: List[str] = []
+        
+        # Build adjacency list (reverse dependencies)
+        dependents: Dict[str, List[str]] = {dn: [] for dn in all_dns}
+        for dn, deps in dependencies.items():
+            for dep in deps:
+                dependents[dep].append(dn)
+        
+        while queue:
+            dn = queue.pop(0)
+            sorted_dns.append(dn)
+            for dependent in dependents[dn]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
+        
+        # Return entries in sorted order
+        return [dn_to_entry[dn] for dn in sorted_dns if dn in dn_to_entry]
+
+    @staticmethod
+    def _to_bytes_dict(
+        attrs: Dict[str, List[str]],
+    ) -> Dict[str, List[bytes]]:
+        """Convert a string-valued attribute dict to bytes for python-ldap."""
+        return {
+            attr: [
+                v.encode("utf-8") if isinstance(v, str) else v for v in values
+            ]
+            for attr, values in attrs.items()
+        }
+
     def restore_from_ldif(self, input_path: str) -> int:
-        """Restore LDAP entries from LDIF format."""
+        """Restore LDAP entries from LDIF format.
+
+        Uses a multi-pass approach to handle referential-integrity
+        constraints (e.g. ``manager``, ``ssoRoles``):
+
+        1. Parse all entries from the LDIF file.
+        2. **Topologically sort** entries by dependencies (managers & roles before users).
+        3. **Pass 1** – attempt a full add of every entry.
+        4. **Pass 2** – retry failed entries as-is (ordering fix).
+        5. **Pass 3** – for entries that still fail, strip deferrable
+           reference attributes (manager, ssoRoles …), add the entry
+           without them, then re-apply the stripped attributes via an
+           LDAP *modify* operation.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if not self.conn:
             self.connect()
 
-        restored_count = 0
+        # --- Phase 1: parse all entries from the file ---
+        entries: List[Tuple[str, Dict[str, List[str]]]] = []
+        current_dn: Optional[str] = None
+        current_attrs: Dict[str, List[str]] = {}
 
         with open(input_path, "r", encoding="utf-8") as f:
-            current_dn: Optional[str] = None
-            current_attrs: Dict[str, List[str]] = {}
-
             for line in f:
                 line = line.rstrip("\n")
 
                 if not line:
-                    # End of entry
                     if current_dn and current_attrs:
-                        try:
-                            # Convert to LDAP modlist format
-                            ldif_attrs: Dict[str, List[bytes]] = {}
-                            for attr, values in current_attrs.items():
-                                ldif_attrs[attr] = [
-                                    v.encode("utf-8") if isinstance(v, str) else v
-                                    for v in values
-                                ]
-
-                            # Add entry
-                            self.conn.add_s(  # type: ignore[union-attr]
-                                current_dn, modlist.addModlist(ldif_attrs)
-                            )
-                            restored_count += 1
-                        except ldap.ALREADY_EXISTS:
-                            # Entry exists, skip
-                            pass
-                        except ldap.LDAPError as e:
-                            # Log error but continue
-                            print(f"Error restoring {current_dn}: {str(e)}")
-
+                        entries.append((current_dn, current_attrs))
                     current_dn = None
                     current_attrs = {}
                     continue
@@ -276,6 +416,225 @@ class LDAPService:
                     if attr not in current_attrs:
                         current_attrs[attr] = []
                     current_attrs[attr].append(value)
+
+            # Handle last entry if file doesn't end with a blank line
+            if current_dn and current_attrs:
+                entries.append((current_dn, current_attrs))
+
+        # --- Phase 2: topologically sort by dependencies (managers/roles first) ---
+        entries = self._topological_sort(entries)
+        logger.info(
+            "Topologically sorted %d entries by dependencies "
+            "(managers/roles first)",
+            len(entries),
+        )
+
+        # --- Phase 3: pass 1 – full add ---
+        restored_count = 0
+        failed_entries: List[Tuple[str, Dict[str, List[str]]]] = []
+
+        for dn, attrs in entries:
+            try:
+                self.conn.add_s(  # type: ignore[union-attr]
+                    dn, modlist.addModlist(self._to_bytes_dict(attrs))
+                )
+                restored_count += 1
+            except ldap.ALREADY_EXISTS:
+                restored_count += 1
+            except ldap.LDAPError:
+                failed_entries.append((dn, attrs))
+
+        if not failed_entries:
+            return restored_count
+
+        # --- Phase 4: pass 2 – simple retry (ordering fix) ---
+        logger.info(
+            "Restore pass 1: %d ok, %d failed. Starting pass 2 (retry)…",
+            restored_count,
+            len(failed_entries),
+        )
+        still_failed: List[Tuple[str, Dict[str, List[str]]]] = []
+
+        for dn, attrs in failed_entries:
+            try:
+                self.conn.add_s(  # type: ignore[union-attr]
+                    dn, modlist.addModlist(self._to_bytes_dict(attrs))
+                )
+                restored_count += 1
+            except ldap.ALREADY_EXISTS:
+                restored_count += 1
+            except ldap.LDAPError:
+                still_failed.append((dn, attrs))
+
+        if not still_failed:
+            return restored_count
+
+        # --- Phase 5: pass 3 – strip deferrable attrs, add, then modify ---
+        logger.info(
+            "Restore pass 2: %d still failing. Starting pass 3 "
+            "(strip‑and‑modify)…",
+            len(still_failed),
+        )
+        # Collect deferred attribute modifications to apply at the end
+        deferred_mods: List[Tuple[str, Dict[str, List[str]]]] = []
+        final_failed: List[Tuple[str, str]] = []
+
+        for dn, attrs in still_failed:
+            # Split attributes into safe vs deferrable
+            safe_attrs: Dict[str, List[str]] = {}
+            deferred_attrs: Dict[str, List[str]] = {}
+            for attr, values in attrs.items():
+                if attr.lower() in {a.lower() for a in self._DEFERRABLE_ATTRS}:
+                    deferred_attrs[attr] = values
+                else:
+                    safe_attrs[attr] = values
+
+            if not safe_attrs:
+                # Nothing left to add (should not happen)
+                final_failed.append((dn, "No non-deferred attributes"))
+                continue
+
+            try:
+                self.conn.add_s(  # type: ignore[union-attr]
+                    dn, modlist.addModlist(self._to_bytes_dict(safe_attrs))
+                )
+                restored_count += 1
+                if deferred_attrs:
+                    deferred_mods.append((dn, deferred_attrs))
+            except ldap.ALREADY_EXISTS:
+                restored_count += 1
+                if deferred_attrs:
+                    deferred_mods.append((dn, deferred_attrs))
+            except ldap.LDAPError as e:
+                final_failed.append((dn, str(e)))
+                logger.warning("Error restoring %s (stripped): %s", dn, e)
+
+        # Now apply deferred attribute modifications
+        # First, collect all referenced DNs and create missing ones
+        all_referenced_dns: Set[str] = set()
+        for dn, deferred_attrs in deferred_mods:
+            for attr, values in deferred_attrs.items():
+                if attr.lower() in {"manager", "ssoroles"}:
+                    all_referenced_dns.update(values)
+        
+        # Check which referenced DNs exist and create missing ones (including ancestors)
+        existing_dns: Set[str] = set()
+        missing_dns_to_create: List[str] = []
+        
+        if all_referenced_dns:
+            for ref_dn in all_referenced_dns:
+                try:
+                    result = self.conn.search_s(  # type: ignore[union-attr]
+                        ref_dn, ldap.SCOPE_BASE, "(objectClass=*)"
+                    )
+                    if result:
+                        existing_dns.add(ref_dn)
+                except ldap.NO_SUCH_OBJECT:
+                    # Mark for creation
+                    missing_dns_to_create.append(ref_dn)
+            
+            # For missing DNs, also check and create ancestors if needed
+            for ref_dn in missing_dns_to_create:
+                # Extract parent OUs from DN
+                dn_parts = ref_dn.split(",")
+                accumulated_dn = ""
+                for i, part in enumerate(dn_parts):
+                    if i == 0:
+                        accumulated_dn = part
+                    else:
+                        accumulated_dn = part + "," + accumulated_dn
+                    
+                    # Skip base DN itself
+                    if accumulated_dn == self.base_dn:
+                        continue
+                    
+                    # Check if this ancestor exists
+                    if accumulated_dn not in existing_dns:
+                        try:
+                            result = self.conn.search_s(  # type: ignore[union-attr]
+                                accumulated_dn, ldap.SCOPE_BASE, "(objectClass=*)"
+                            )
+                            if result:
+                                existing_dns.add(accumulated_dn)
+                            else:
+                                # Create missing ancestor
+                                if self._create_missing_entry(accumulated_dn, logger):
+                                    existing_dns.add(accumulated_dn)
+                        except ldap.NO_SUCH_OBJECT:
+                            # Create missing ancestor
+                            if self._create_missing_entry(accumulated_dn, logger):
+                                existing_dns.add(accumulated_dn)
+            
+            # Now create the actual missing DNs
+            for ref_dn in missing_dns_to_create:
+                if self._create_missing_entry(ref_dn, logger):
+                    existing_dns.add(ref_dn)
+        
+        deferred_ok = 0
+        deferred_fail = 0
+        deferred_skipped = 0
+        retry_failed = []
+        
+        for dn, deferred_attrs in deferred_mods:
+            mod_list = [
+                (ldap.MOD_ADD, attr, [
+                    v.encode("utf-8") if isinstance(v, str) else v
+                    for v in values
+                ])
+                for attr, values in deferred_attrs.items()
+            ]
+            try:
+                self.conn.modify_s(dn, mod_list)  # type: ignore[union-attr]
+                deferred_ok += 1
+            except ldap.TYPE_OR_VALUE_EXISTS:
+                deferred_ok += 1
+            except ldap.LDAPError as e:
+                # Save for potential retry
+                retry_failed.append((dn, deferred_attrs, str(e)))
+                deferred_fail += 1
+                logger.debug(
+                    "Initial attempt failed for deferred attrs on %s: %s", dn, e
+                )
+        
+        # Retry failed modifications once more (in case entry creation helped)
+        if retry_failed:
+            logger.info(
+                "Retrying %d failed deferred attribute modifications…", len(retry_failed)
+            )
+            for dn, deferred_attrs, initial_error in retry_failed:
+                mod_list = [
+                    (ldap.MOD_ADD, attr, [
+                        v.encode("utf-8") if isinstance(v, str) else v
+                        for v in values
+                    ])
+                    for attr, values in deferred_attrs.items()
+                ]
+                try:
+                    self.conn.modify_s(dn, mod_list)  # type: ignore[union-attr]
+                    deferred_ok += 1
+                    deferred_fail -= 1
+                    logger.info("Retry succeeded for %s", dn)
+                except ldap.TYPE_OR_VALUE_EXISTS:
+                    deferred_ok += 1
+                    deferred_fail -= 1
+                except ldap.LDAPError as e:
+                    logger.warning(
+                        "Retry failed for deferred attrs on %s: %s", dn, e
+                    )
+
+        if deferred_ok or deferred_fail or deferred_skipped:
+            logger.info(
+                "Deferred attribute modifications: %d succeeded, %d failed, %d skipped",
+                deferred_ok,
+                deferred_fail,
+                deferred_skipped,
+            )
+
+        if final_failed:
+            logger.warning(
+                "Restore completed with %d entries that could not be restored",
+                len(final_failed),
+            )
 
         return restored_count
 
